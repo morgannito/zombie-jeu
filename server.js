@@ -770,6 +770,11 @@ function gameLoop() {
 
     if (!player.alive) continue;
 
+    // Vérifier l'expiration de la protection de spawn
+    if (player.spawnProtection && now > player.spawnProtectionEndTime) {
+      player.spawnProtection = false;
+    }
+
     // Retour au pistolet si l'arme spéciale a expiré
     if (player.weaponTimer && now > player.weaponTimer) {
       player.weapon = 'pistol';
@@ -834,17 +839,22 @@ function gameLoop() {
     }
 
     // Trouver le joueur le plus proche
+    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo ou avec protection de spawn
     let closestPlayer = null;
     let closestDistance = Infinity;
 
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
-      if (player.alive) {
-        const dist = distance(zombie.x, zombie.y, player.x, player.y);
-        if (dist < closestDistance) {
-          closestDistance = dist;
-          closestPlayer = player;
-        }
+
+      // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
+      if (!player.alive || !player.hasNickname || player.spawnProtection) {
+        continue;
+      }
+
+      const dist = distance(zombie.x, zombie.y, player.x, player.y);
+      if (dist < closestDistance) {
+        closestDistance = dist;
+        closestPlayer = player;
       }
     }
 
@@ -1181,6 +1191,10 @@ io.on('connection', (socket) => {
   // Créer un nouveau joueur (Rogue-like)
   gameState.players[socket.id] = {
     id: socket.id,
+    nickname: null, // Pseudo non défini au départ
+    hasNickname: false, // Le joueur n'a pas encore choisi de pseudo
+    spawnProtection: false, // Protection de spawn inactive
+    spawnProtectionEndTime: 0, // Fin de la protection
     x: CONFIG.ROOM_WIDTH / 2,
     y: CONFIG.ROOM_HEIGHT - 100,
     health: CONFIG.PLAYER_MAX_HEALTH,
@@ -1236,7 +1250,7 @@ io.on('connection', (socket) => {
   // Mouvement du joueur (Rogue-like avec collision)
   socket.on('playerMove', (data) => {
     const player = gameState.players[socket.id];
-    if (!player || !player.alive) return;
+    if (!player || !player.alive || !player.hasNickname) return; // Pas de mouvement sans pseudo
 
     const newX = Math.max(0, Math.min(CONFIG.ROOM_WIDTH, data.x));
     const newY = Math.max(0, Math.min(CONFIG.ROOM_HEIGHT, data.y));
@@ -1255,7 +1269,7 @@ io.on('connection', (socket) => {
   // Tir du joueur
   socket.on('shoot', (data) => {
     const player = gameState.players[socket.id];
-    if (!player || !player.alive) return;
+    if (!player || !player.alive || !player.hasNickname) return; // Pas de tir sans pseudo
 
     const now = Date.now();
     const weapon = WEAPONS[player.weapon] || WEAPONS.pistol;
@@ -1321,6 +1335,10 @@ io.on('connection', (socket) => {
       const totalMaxHealth = baseMaxHealth + upgradeHealth;
 
       // Réinitialiser le run (Permadeath mais garde les upgrades permanents)
+      player.nickname = null; // Réinitialiser le pseudo
+      player.hasNickname = false;
+      player.spawnProtection = false;
+      player.spawnProtectionEndTime = 0;
       player.x = CONFIG.ROOM_WIDTH / 2;
       player.y = CONFIG.ROOM_HEIGHT - 100;
       player.health = totalMaxHealth;
@@ -1419,6 +1437,38 @@ io.on('connection', (socket) => {
 
       socket.emit('shopUpdate', { success: true, itemId, category });
     }
+  });
+
+  // Définir le pseudo du joueur
+  socket.on('setNickname', (data) => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    const nickname = data.nickname.trim().substring(0, 15); // Max 15 caractères
+
+    if (nickname.length >= 2) {
+      player.nickname = nickname;
+      player.hasNickname = true;
+      player.spawnProtection = true;
+      player.spawnProtectionEndTime = Date.now() + 3000; // 3 secondes de protection
+
+      console.log(`${socket.id} a choisi le pseudo: ${nickname}`);
+
+      // Notifier tous les joueurs
+      io.emit('playerNicknameSet', {
+        playerId: socket.id,
+        nickname: nickname
+      });
+    }
+  });
+
+  // Fin de la protection de spawn
+  socket.on('endSpawnProtection', () => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    player.spawnProtection = false;
+    console.log(`${player.nickname || socket.id} n'a plus de protection de spawn`);
   });
 
   // Déconnexion du joueur

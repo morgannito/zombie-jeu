@@ -43,6 +43,75 @@ let keys = {};
 let mouse = { x: 0, y: 0 };
 let camera = { x: 0, y: 0 };
 let shopOpen = false;
+let playerNickname = null;
+let gameStarted = false;
+let spawnProtectionEndTime = 0;
+
+// Gestion du pseudo au démarrage
+const nicknameInput = document.getElementById('nickname-input');
+const startGameBtn = document.getElementById('start-game-btn');
+const nicknameScreen = document.getElementById('nickname-screen');
+
+// Valider le pseudo avec Enter
+nicknameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        startGame();
+    }
+});
+
+// Bouton pour commencer
+startGameBtn.addEventListener('click', () => {
+    startGame();
+});
+
+function startGame() {
+    const nickname = nicknameInput.value.trim();
+
+    if (nickname.length < 2) {
+        alert('Votre pseudo doit contenir au moins 2 caractères !');
+        return;
+    }
+
+    if (nickname.length > 15) {
+        alert('Votre pseudo ne peut pas dépasser 15 caractères !');
+        return;
+    }
+
+    playerNickname = nickname;
+    gameStarted = true;
+
+    // Cacher l'écran de sélection
+    nicknameScreen.style.display = 'none';
+
+    // Envoyer le pseudo au serveur
+    socket.emit('setNickname', { nickname: playerNickname });
+
+    // Afficher le nom du joueur dans l'interface
+    document.getElementById('player-name-display').textContent = `🎮 ${playerNickname}`;
+
+    // Démarrer la protection de spawn (3 secondes)
+    spawnProtectionEndTime = Date.now() + 3000;
+    showSpawnProtection();
+}
+
+function showSpawnProtection() {
+    const protectionDiv = document.getElementById('spawn-protection');
+    const timerSpan = document.getElementById('protection-timer');
+
+    protectionDiv.style.display = 'block';
+
+    const interval = setInterval(() => {
+        const remaining = Math.ceil((spawnProtectionEndTime - Date.now()) / 1000);
+
+        if (remaining <= 0) {
+            protectionDiv.style.display = 'none';
+            clearInterval(interval);
+            socket.emit('endSpawnProtection');
+        } else {
+            timerSpan.textContent = remaining;
+        }
+    }, 100);
+}
 
 // Input clavier
 window.addEventListener('keydown', (e) => {
@@ -67,7 +136,7 @@ canvas.addEventListener('mousemove', (e) => {
 
 canvas.addEventListener('click', () => {
     const player = gameState.players[playerId];
-    if (player && player.alive) {
+    if (player && player.alive && gameStarted) { // Pas de tir sans pseudo
         const angle = Math.atan2(
             mouse.y - canvas.height / 2,
             mouse.x - canvas.width / 2
@@ -80,6 +149,13 @@ canvas.addEventListener('click', () => {
 document.getElementById('respawn-btn').addEventListener('click', () => {
     socket.emit('respawn');
     document.getElementById('game-over').style.display = 'none';
+
+    // Réafficher l'écran de sélection de pseudo
+    gameStarted = false;
+    playerNickname = null;
+    nicknameInput.value = '';
+    nicknameScreen.style.display = 'flex';
+    nicknameInput.focus();
 });
 
 // Initialisation depuis le serveur
@@ -331,7 +407,7 @@ function updateUI() {
 // Mouvement du joueur
 function updatePlayerPosition() {
     const player = gameState.players[playerId];
-    if (!player || !player.alive) return;
+    if (!player || !player.alive || !gameStarted) return; // Pas de mouvement sans pseudo
 
     let dx = 0;
     let dy = 0;
