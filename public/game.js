@@ -471,7 +471,14 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const player = gameState.players[playerId];
-    if (!player) return;
+    if (!player) {
+        // Afficher un message d'attente si pas encore de joueur
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Connexion au serveur...', canvas.width / 2, canvas.height / 2);
+        return;
+    }
 
     // Caméra centrée sur le joueur
     camera.x = player.x - canvas.width / 2;
