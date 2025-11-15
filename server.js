@@ -362,7 +362,7 @@ const SHOP_ITEMS = {
       costIncrease: 35,
       maxLevel: 5,
       effect: (player) => {
-        player.damageMultiplier = (player.damageMultiplier || 1) + 0.1;
+        player.damageMultiplier = (player.damageMultiplier || 1) * 1.10;
       }
     },
     speed: {
@@ -373,7 +373,7 @@ const SHOP_ITEMS = {
       costIncrease: 30,
       maxLevel: 5,
       effect: (player) => {
-        player.speedMultiplier = (player.speedMultiplier || 1) + 0.15;
+        player.speedMultiplier = (player.speedMultiplier || 1) * 1.15;
       }
     },
     fireRate: {
@@ -384,7 +384,7 @@ const SHOP_ITEMS = {
       costIncrease: 40,
       maxLevel: 5,
       effect: (player) => {
-        player.fireRateMultiplier = (player.fireRateMultiplier || 1) - 0.1;
+        player.fireRateMultiplier = (player.fireRateMultiplier || 1) * 0.90;
       }
     }
   },
