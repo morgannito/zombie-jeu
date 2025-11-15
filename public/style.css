@@ -125,13 +125,13 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.7); /* Plus transparent pour voir le jeu derrière */
+    background: rgba(0, 0, 0, 0.3); /* Très transparent pour voir le jeu derrière */
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
     pointer-events: auto;
-    backdrop-filter: blur(5px); /* Flou d'arrière-plan */
+    backdrop-filter: blur(3px); /* Flou léger d'arrière-plan */
 }
 
 .nickname-container {

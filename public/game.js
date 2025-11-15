@@ -34,7 +34,15 @@ let gameState = {
 };
 let previousGameState = null; // Pour l'interpolation
 let interpolationAlpha = 0;   // Facteur d'interpolation
-let config = {};
+// Config par défaut (sera écrasé par le serveur)
+let config = {
+    ROOM_WIDTH: 3000,
+    ROOM_HEIGHT: 2400,
+    PLAYER_SIZE: 20,
+    ZOMBIE_SIZE: 25,
+    POWERUP_SIZE: 15,
+    LOOT_SIZE: 10
+};
 let weapons = {};
 let powerupTypes = {};
 let zombieTypes = {};
