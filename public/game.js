@@ -18,7 +18,7 @@ window.addEventListener('resize', () => {
     canvas.height = window.innerHeight;
 });
 
-// Variables du jeu
+// Variables du jeu (Rogue-like)
 let playerId = null;
 let gameState = {
     players: {},
@@ -26,15 +26,19 @@ let gameState = {
     bullets: {},
     powerups: {},
     particles: {},
-    wave: 1
+    loot: {},
+    walls: [],
+    currentRoom: 0,
+    totalRooms: 5,
+    doors: []
 };
 let config = {};
 let weapons = {};
 let powerupTypes = {};
+let zombieTypes = {};
 let keys = {};
 let mouse = { x: 0, y: 0 };
 let camera = { x: 0, y: 0 };
-let currentWave = 1;
 
 // Input clavier
 window.addEventListener('keydown', (e) => {
@@ -74,6 +78,7 @@ socket.on('init', (data) => {
     config = data.config;
     weapons = data.weapons;
     powerupTypes = data.powerupTypes;
+    zombieTypes = data.zombieTypes;
     console.log('Connecté au jeu! ID:', playerId);
 });
 
@@ -83,21 +88,74 @@ socket.on('gameState', (state) => {
     updateUI();
 });
 
-// Nouvelle vague
-socket.on('newWave', (wave) => {
-    currentWave = wave;
-    showWaveAnnouncement(wave);
+// Boss spawned
+socket.on('bossSpawned', (data) => {
+    showBossAnnouncement(data.bossName);
 });
 
-// Afficher l'annonce de vague
-function showWaveAnnouncement(wave) {
+// Level up
+socket.on('levelUp', (data) => {
+    showLevelUpNotification(data.newLevel);
+});
+
+// Porte ouverte
+socket.on('doorOpened', () => {
+    console.log('La porte est ouverte!');
+});
+
+// Changement de salle
+socket.on('roomChanged', (data) => {
+    showRoomAnnouncement(data.roomIndex + 1, data.totalRooms);
+});
+
+// Run complété
+socket.on('runCompleted', (data) => {
+    showRunCompleted(data.gold, data.level);
+});
+
+// Afficher annonce de boss
+function showBossAnnouncement(bossName) {
     const announcement = document.getElementById('wave-announcement');
-    document.getElementById('wave-number').textContent = wave;
+    announcement.querySelector('h1').textContent = 'BOSS !';
+    announcement.querySelector('p').textContent = bossName;
+    announcement.style.background = 'rgba(255, 0, 0, 0.9)';
+    announcement.style.display = 'block';
+
+    setTimeout(() => {
+        announcement.style.display = 'none';
+        announcement.style.background = 'rgba(255, 170, 0, 0.9)';
+    }, 2500);
+}
+
+// Afficher level up
+function showLevelUpNotification(newLevel) {
+    const announcement = document.getElementById('wave-announcement');
+    announcement.querySelector('h1').textContent = 'LEVEL UP!';
+    announcement.querySelector('p').textContent = `Niveau ${newLevel}`;
+    announcement.style.background = 'rgba(0, 200, 0, 0.9)';
+    announcement.style.display = 'block';
+
+    setTimeout(() => {
+        announcement.style.display = 'none';
+        announcement.style.background = 'rgba(255, 170, 0, 0.9)';
+    }, 1500);
+}
+
+// Afficher changement de salle
+function showRoomAnnouncement(roomNum, totalRooms) {
+    const announcement = document.getElementById('wave-announcement');
+    announcement.querySelector('h1').textContent = `Salle ${roomNum}/${totalRooms}`;
+    announcement.querySelector('p').textContent = 'En avant!';
     announcement.style.display = 'block';
 
     setTimeout(() => {
         announcement.style.display = 'none';
     }, 2000);
+}
+
+// Run complété
+function showRunCompleted(gold, level) {
+    alert(`Run complété! Or gagné: ${gold}, Niveau atteint: ${level}`);
 }
 
 // Mise à jour de l'interface
@@ -106,27 +164,26 @@ function updateUI() {
 
     if (player) {
         // Barre de vie
-        const healthPercent = (player.health / config.PLAYER_MAX_HEALTH) * 100;
+        const healthPercent = (player.health / player.maxHealth) * 100;
         document.getElementById('health-fill').style.width = healthPercent + '%';
         document.getElementById('health-text').textContent = Math.max(0, Math.round(player.health));
 
-        // Score
+        // Score et stats
         document.getElementById('score-value').textContent = player.score;
+        document.getElementById('wave-value').textContent = `${gameState.currentRoom + 1}/${gameState.totalRooms}`;
 
-        // Arme
-        const weaponName = weapons[player.weapon]?.name || 'Pistolet';
-        document.getElementById('weapon-value').textContent = weaponName;
+        // Niveau et XP
+        if (player.level) {
+            document.getElementById('weapon-value').textContent = `Lvl ${player.level} | ${player.gold} gold`;
+        }
 
         // Game Over
         if (!player.alive) {
             document.getElementById('game-over').style.display = 'block';
             document.getElementById('final-score').textContent = player.score;
-            document.getElementById('final-wave').textContent = gameState.wave;
+            document.getElementById('final-wave').textContent = `${gameState.currentRoom + 1}/${gameState.totalRooms}`;
         }
     }
-
-    // Vague
-    document.getElementById('wave-value').textContent = gameState.wave;
 
     // Nombre de joueurs
     document.getElementById('players-count').textContent = Object.keys(gameState.players).length;
@@ -144,9 +201,9 @@ function updatePlayerPosition() {
     let dy = 0;
 
     // WASD ou flèches
-    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['w'] || keys['arrowup'] || keys['z']) dy -= 1;
     if (keys['s'] || keys['arrowdown']) dy += 1;
-    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['a'] || keys['arrowleft'] || keys['q']) dx -= 1;
     if (keys['d'] || keys['arrowright']) dx += 1;
 
     // Normaliser le vecteur diagonal
@@ -179,10 +236,10 @@ function updatePlayerPosition() {
     });
 }
 
-// Rendu du jeu
+// Rendu du jeu (Rogue-like)
 function render() {
     // Effacer le canvas
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const player = gameState.players[playerId];
@@ -195,13 +252,39 @@ function render() {
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Grille de fond
-    drawGrid();
+    // Sol de la salle
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, config.ROOM_WIDTH, config.ROOM_HEIGHT);
 
-    // Dessiner les limites du monde
-    ctx.strokeStyle = '#ff0000';
-    ctx.lineWidth = 5;
-    ctx.strokeRect(0, 0, config.WORLD_WIDTH, config.WORLD_HEIGHT);
+    // Grille de sol
+    drawFloorGrid();
+
+    // Dessiner les murs
+    ctx.fillStyle = '#2d2d44';
+    for (let wall of gameState.walls) {
+        ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+
+        // Bordure de mur
+        ctx.strokeStyle = '#3d3d54';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x, wall.y, wall.width, wall.height);
+    }
+
+    // Dessiner les portes
+    for (let door of gameState.doors) {
+        if (door.active) {
+            ctx.fillStyle = '#00ff00';
+        } else {
+            ctx.fillStyle = '#ff0000';
+        }
+        ctx.fillRect(door.x, door.y, door.width, door.height);
+
+        // Symbole porte
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(door.active ? '▲' : '✖', door.x + door.width / 2, door.y + 15);
+    }
 
     // Dessiner les power-ups
     for (let powerupId in gameState.powerups) {
@@ -224,7 +307,7 @@ function render() {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Icône ou texte
+        // Icône
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
@@ -237,6 +320,30 @@ function render() {
         else if (powerup.type === 'machinegun') symbol = 'M';
 
         ctx.fillText(symbol, powerup.x, powerup.y);
+    }
+
+    // Dessiner le loot (pièces d'or)
+    for (let lootId in gameState.loot) {
+        const loot = gameState.loot[lootId];
+
+        // Rotation
+        const rotation = (Date.now() / 500) % (Math.PI * 2);
+
+        ctx.save();
+        ctx.translate(loot.x, loot.y);
+        ctx.rotate(rotation);
+
+        // Pièce d'or
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, config.LOOT_SIZE, config.LOOT_SIZE * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ff8c00';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.restore();
     }
 
     // Dessiner les particules
@@ -262,43 +369,52 @@ function render() {
         ctx.shadowBlur = 0;
     }
 
-    // Dessiner les zombies
+    // Dessiner les zombies (par type)
     for (let zombieId in gameState.zombies) {
         const zombie = gameState.zombies[zombieId];
 
-        // Corps du zombie
-        ctx.fillStyle = '#00ff00';
+        // Corps du zombie (couleur selon type)
+        ctx.fillStyle = zombie.color;
         ctx.beginPath();
-        ctx.arc(zombie.x, zombie.y, config.ZOMBIE_SIZE, 0, Math.PI * 2);
+        ctx.arc(zombie.x, zombie.y, zombie.size, 0, Math.PI * 2);
         ctx.fill();
 
-        // Bordure plus sombre
-        ctx.strokeStyle = '#008800';
-        ctx.lineWidth = 2;
+        // Bordure
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = zombie.isBoss ? 4 : 2;
         ctx.stroke();
 
         // Yeux rouges
+        const eyeSize = zombie.isBoss ? 6 : 3;
+        const eyeOffset = zombie.size * 0.3;
         ctx.fillStyle = '#ff0000';
         ctx.beginPath();
-        ctx.arc(zombie.x - 8, zombie.y - 5, 3, 0, Math.PI * 2);
-        ctx.arc(zombie.x + 8, zombie.y - 5, 3, 0, Math.PI * 2);
+        ctx.arc(zombie.x - eyeOffset, zombie.y - 5, eyeSize, 0, Math.PI * 2);
+        ctx.arc(zombie.x + eyeOffset, zombie.y - 5, eyeSize, 0, Math.PI * 2);
         ctx.fill();
 
-        // Bouche
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(zombie.x, zombie.y + 5, 6, 0, Math.PI);
-        ctx.stroke();
-
-        // Barre de vie zombie
+        // Barre de vie
         if (zombie.maxHealth) {
             const healthPercent = zombie.health / zombie.maxHealth;
-            ctx.fillStyle = '#ff0000';
-            ctx.fillRect(zombie.x - 20, zombie.y - 35, 40 * healthPercent, 5);
+            const barWidth = zombie.size * 1.6;
+            const barY = zombie.y - zombie.size - 10;
+
+            ctx.fillStyle = healthPercent > 0.5 ? '#00ff00' : healthPercent > 0.25 ? '#ffff00' : '#ff0000';
+            ctx.fillRect(zombie.x - barWidth / 2, barY, barWidth * healthPercent, 5);
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 1;
-            ctx.strokeRect(zombie.x - 20, zombie.y - 35, 40, 5);
+            ctx.strokeRect(zombie.x - barWidth / 2, barY, barWidth, 5);
+        }
+
+        // Nom si boss
+        if (zombie.isBoss) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            ctx.strokeText('BOSS', zombie.x, zombie.y - zombie.size - 25);
+            ctx.fillText('BOSS', zombie.x, zombie.y - zombie.size - 25);
         }
     }
 
@@ -310,9 +426,7 @@ function render() {
         if (!p.alive) continue;
 
         // Effet de vitesse
-        let glowColor = isCurrentPlayer ? '#0088ff' : '#ff8800';
         if (p.speedBoost && Date.now() < p.speedBoost) {
-            glowColor = '#00ffff';
             ctx.shadowBlur = 20;
             ctx.shadowColor = '#00ffff';
         }
@@ -326,7 +440,7 @@ function render() {
 
         // Bordure
         ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.stroke();
 
         // Direction de visée (arme)
@@ -341,18 +455,18 @@ function render() {
         );
         ctx.stroke();
 
-        // Nom du joueur
+        // Nom et niveau du joueur
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(
-            isCurrentPlayer ? 'Vous' : 'Joueur',
-            p.x,
-            p.y - config.PLAYER_SIZE - 15
-        );
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        const playerLabel = isCurrentPlayer ? `Vous (Lv${p.level || 1})` : `Joueur (Lv${p.level || 1})`;
+        ctx.strokeText(playerLabel, p.x, p.y - config.PLAYER_SIZE - 15);
+        ctx.fillText(playerLabel, p.x, p.y - config.PLAYER_SIZE - 15);
 
         // Barre de vie
-        const healthPercent = p.health / config.PLAYER_MAX_HEALTH;
+        const healthPercent = p.health / p.maxHealth;
         ctx.fillStyle = healthPercent > 0.5 ? '#00ff00' : healthPercent > 0.25 ? '#ffff00' : '#ff0000';
         ctx.fillRect(p.x - 20, p.y + config.PLAYER_SIZE + 5, 40 * healthPercent, 5);
         ctx.strokeStyle = '#fff';
@@ -366,54 +480,67 @@ function render() {
     drawMinimap();
 }
 
-// Grille de fond
-function drawGrid() {
-    ctx.strokeStyle = '#2a2a2a';
+// Grille de sol
+function drawFloorGrid() {
+    ctx.strokeStyle = '#252541';
     ctx.lineWidth = 1;
 
     const gridSize = 50;
-    const startX = Math.floor(camera.x / gridSize) * gridSize;
-    const startY = Math.floor(camera.y / gridSize) * gridSize;
 
-    for (let x = startX; x < camera.x + canvas.width; x += gridSize) {
+    for (let x = 0; x < config.ROOM_WIDTH; x += gridSize) {
         ctx.beginPath();
-        ctx.moveTo(x, camera.y);
-        ctx.lineTo(x, camera.y + canvas.height);
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, config.ROOM_HEIGHT);
         ctx.stroke();
     }
 
-    for (let y = startY; y < camera.y + canvas.height; y += gridSize) {
+    for (let y = 0; y < config.ROOM_HEIGHT; y += gridSize) {
         ctx.beginPath();
-        ctx.moveTo(camera.x, y);
-        ctx.lineTo(camera.x + canvas.width, y);
+        ctx.moveTo(0, y);
+        ctx.lineTo(config.ROOM_WIDTH, y);
         ctx.stroke();
     }
 }
 
-// Dessiner la minimap
+// Dessiner la minimap (Rogue-like)
 function drawMinimap() {
-    if (!config.WORLD_WIDTH) return;
+    if (!config.ROOM_WIDTH) return;
 
     const mapWidth = minimap.width;
     const mapHeight = minimap.height;
-    const scaleX = mapWidth / config.WORLD_WIDTH;
-    const scaleY = mapHeight / config.WORLD_HEIGHT;
+    const scaleX = mapWidth / config.ROOM_WIDTH;
+    const scaleY = mapHeight / config.ROOM_HEIGHT;
 
     // Fond
-    minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     minimapCtx.fillRect(0, 0, mapWidth, mapHeight);
 
-    // Bordure du monde
-    minimapCtx.strokeStyle = '#ff0000';
-    minimapCtx.lineWidth = 2;
-    minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
+    // Murs
+    minimapCtx.fillStyle = '#444';
+    for (let wall of gameState.walls) {
+        minimapCtx.fillRect(
+            wall.x * scaleX,
+            wall.y * scaleY,
+            wall.width * scaleX,
+            wall.height * scaleY
+        );
+    }
 
     // Zombies
-    minimapCtx.fillStyle = '#00ff00';
     for (let zombieId in gameState.zombies) {
         const zombie = gameState.zombies[zombieId];
+        minimapCtx.fillStyle = zombie.isBoss ? '#ff0000' : zombie.color;
         minimapCtx.beginPath();
-        minimapCtx.arc(zombie.x * scaleX, zombie.y * scaleY, 2, 0, Math.PI * 2);
+        minimapCtx.arc(zombie.x * scaleX, zombie.y * scaleY, zombie.isBoss ? 6 : 3, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
+    // Loot
+    minimapCtx.fillStyle = '#ffd700';
+    for (let lootId in gameState.loot) {
+        const loot = gameState.loot[lootId];
+        minimapCtx.beginPath();
+        minimapCtx.arc(loot.x * scaleX, loot.y * scaleY, 2, 0, Math.PI * 2);
         minimapCtx.fill();
     }
 
@@ -437,7 +564,7 @@ function drawMinimap() {
         minimapCtx.fill();
     }
 
-    // Joueur actuel (toujours en dernier pour être au-dessus)
+    // Joueur actuel
     const player = gameState.players[playerId];
     if (player && player.alive) {
         minimapCtx.fillStyle = '#0088ff';
@@ -456,6 +583,11 @@ function drawMinimap() {
         );
         minimapCtx.stroke();
     }
+
+    // Bordure
+    minimapCtx.strokeStyle = '#00ff00';
+    minimapCtx.lineWidth = 2;
+    minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
 }
 
 // Boucle de jeu
