@@ -342,3 +342,158 @@ body {
 .shop-item.maxed .shop-item-name {
     color: #00ff00;
 }
+
+/* Level Up Screen */
+#level-up-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 150;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.level-up-container {
+    text-align: center;
+    max-width: 1200px;
+    width: 90%;
+}
+
+.level-up-title {
+    font-size: 64px;
+    color: #ffd700;
+    text-shadow: 0 0 20px #ffd700, 0 0 40px #ffd700;
+    margin-bottom: 10px;
+    animation: pulse 1s infinite;
+}
+
+.level-up-subtitle {
+    font-size: 24px;
+    color: #fff;
+    margin-bottom: 40px;
+}
+
+.upgrade-choices {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.upgrade-card {
+    width: 320px;
+    background: rgba(20, 20, 40, 0.95);
+    border: 3px solid;
+    border-radius: 15px;
+    padding: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.upgrade-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.upgrade-card:hover::before {
+    opacity: 1;
+}
+
+.upgrade-card:hover {
+    transform: translateY(-10px) scale(1.05);
+    box-shadow: 0 10px 40px rgba(255, 255, 255, 0.3);
+}
+
+/* Raretés */
+.upgrade-card.common {
+    border-color: #9e9e9e;
+}
+
+.upgrade-card.common:hover {
+    box-shadow: 0 10px 40px rgba(158, 158, 158, 0.5);
+}
+
+.upgrade-card.rare {
+    border-color: #2196f3;
+}
+
+.upgrade-card.rare:hover {
+    box-shadow: 0 10px 40px rgba(33, 150, 243, 0.6);
+}
+
+.upgrade-card.legendary {
+    border-color: #ffd700;
+    background: rgba(40, 30, 10, 0.95);
+}
+
+.upgrade-card.legendary:hover {
+    box-shadow: 0 10px 40px rgba(255, 215, 0, 0.8);
+}
+
+.upgrade-rarity {
+    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-bottom: 15px;
+}
+
+.upgrade-card.common .upgrade-rarity {
+    color: #9e9e9e;
+}
+
+.upgrade-card.rare .upgrade-rarity {
+    color: #2196f3;
+    text-shadow: 0 0 10px #2196f3;
+}
+
+.upgrade-card.legendary .upgrade-rarity {
+    color: #ffd700;
+    text-shadow: 0 0 10px #ffd700, 0 0 20px #ffd700;
+    animation: glow 2s infinite;
+}
+
+.upgrade-name {
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 15px;
+}
+
+.upgrade-description {
+    font-size: 16px;
+    color: #ccc;
+    line-height: 1.5;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes glow {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}

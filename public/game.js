@@ -96,9 +96,9 @@ socket.on('bossSpawned', (data) => {
     showBossAnnouncement(data.bossName);
 });
 
-// Level up
+// Level up - afficher les choix d'upgrades
 socket.on('levelUp', (data) => {
-    showLevelUpNotification(data.newLevel);
+    showLevelUpScreen(data.newLevel, data.upgradeChoices);
 });
 
 // Porte ouverte - Afficher le shop
@@ -134,19 +134,47 @@ function showBossAnnouncement(bossName) {
     }, 2500);
 }
 
-// Afficher level up
-function showLevelUpNotification(newLevel) {
-    const announcement = document.getElementById('wave-announcement');
-    announcement.querySelector('h1').textContent = 'LEVEL UP!';
-    announcement.querySelector('p').textContent = `Niveau ${newLevel}`;
-    announcement.style.background = 'rgba(0, 200, 0, 0.9)';
-    announcement.style.display = 'block';
+// Afficher l'écran de level up avec choix d'upgrades
+function showLevelUpScreen(newLevel, upgradeChoices) {
+    const levelUpScreen = document.getElementById('level-up-screen');
+    const upgradeChoicesContainer = document.getElementById('upgrade-choices');
 
-    setTimeout(() => {
-        announcement.style.display = 'none';
-        announcement.style.background = 'rgba(255, 170, 0, 0.9)';
-    }, 1500);
+    // Vider les choix précédents
+    upgradeChoicesContainer.innerHTML = '';
+
+    // Créer les cartes d'upgrades
+    upgradeChoices.forEach(upgrade => {
+        const card = document.createElement('div');
+        card.className = `upgrade-card ${upgrade.rarity}`;
+        card.innerHTML = `
+            <div class="upgrade-rarity">${upgrade.rarity}</div>
+            <div class="upgrade-name">${upgrade.name}</div>
+            <div class="upgrade-description">${upgrade.description}</div>
+        `;
+
+        card.addEventListener('click', () => {
+            selectUpgrade(upgrade.id);
+            levelUpScreen.style.display = 'none';
+        });
+
+        upgradeChoicesContainer.appendChild(card);
+    });
+
+    // Afficher l'écran
+    levelUpScreen.style.display = 'flex';
 }
+
+// Sélectionner un upgrade
+function selectUpgrade(upgradeId) {
+    socket.emit('selectUpgrade', { upgradeId });
+}
+
+// Confirmation de sélection d'upgrade
+socket.on('upgradeSelected', (data) => {
+    if (data.success) {
+        console.log('Upgrade sélectionné:', data.upgradeId);
+    }
+});
 
 // Afficher changement de salle
 function showRoomAnnouncement(roomNum, totalRooms) {

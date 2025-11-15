@@ -206,6 +206,139 @@ const ZOMBIE_TYPES = {
   }
 };
 
+// Level-up Upgrades (choix à chaque niveau)
+const LEVEL_UP_UPGRADES = {
+  maxHealthBoost: {
+    id: 'maxHealthBoost',
+    name: '❤️ Coeur Robuste',
+    description: '+30 PV max',
+    rarity: 'common',
+    effect: (player) => {
+      player.maxHealth += 30;
+      player.health = Math.min(player.health + 30, player.maxHealth);
+    }
+  },
+  damageBoost: {
+    id: 'damageBoost',
+    name: '⚔️ Force Brute',
+    description: '+15% dégâts',
+    rarity: 'common',
+    effect: (player) => {
+      player.damageMultiplier = (player.damageMultiplier || 1) * 1.15;
+    }
+  },
+  speedBoost: {
+    id: 'speedBoost',
+    name: '👟 Vélocité',
+    description: '+20% vitesse',
+    rarity: 'common',
+    effect: (player) => {
+      player.speedMultiplier = (player.speedMultiplier || 1) * 1.20;
+    }
+  },
+  fireRateBoost: {
+    id: 'fireRateBoost',
+    name: '🔫 Gâchette Rapide',
+    description: '-15% cooldown armes',
+    rarity: 'common',
+    effect: (player) => {
+      player.fireRateMultiplier = (player.fireRateMultiplier || 1) * 0.85;
+    }
+  },
+  regeneration: {
+    id: 'regeneration',
+    name: '💚 Régénération',
+    description: '+1 PV/sec',
+    rarity: 'rare',
+    effect: (player) => {
+      player.regeneration = (player.regeneration || 0) + 1;
+    }
+  },
+  bulletPiercing: {
+    id: 'bulletPiercing',
+    name: '🎯 Balles Perforantes',
+    description: 'Les balles traversent 1 ennemi de plus',
+    rarity: 'rare',
+    effect: (player) => {
+      player.bulletPiercing = (player.bulletPiercing || 0) + 1;
+    }
+  },
+  lifeSteal: {
+    id: 'lifeSteal',
+    name: '🩸 Vol de Vie',
+    description: '+5% de vol de vie sur dégâts',
+    rarity: 'rare',
+    effect: (player) => {
+      player.lifeSteal = (player.lifeSteal || 0) + 0.05;
+    }
+  },
+  criticalChance: {
+    id: 'criticalChance',
+    name: '💥 Coup Critique',
+    description: '+10% chance de critique (x2 dégâts)',
+    rarity: 'rare',
+    effect: (player) => {
+      player.criticalChance = (player.criticalChance || 0) + 0.10;
+    }
+  },
+  goldMagnet: {
+    id: 'goldMagnet',
+    name: '💰 Aimant à Or',
+    description: '+50% rayon de collecte',
+    rarity: 'common',
+    effect: (player) => {
+      player.goldMagnetRadius = (player.goldMagnetRadius || 0) + 50;
+    }
+  },
+  dodgeChance: {
+    id: 'dodgeChance',
+    name: '🌀 Esquive',
+    description: '+8% chance d\'esquive',
+    rarity: 'rare',
+    effect: (player) => {
+      player.dodgeChance = (player.dodgeChance || 0) + 0.08;
+    }
+  },
+  explosiveRounds: {
+    id: 'explosiveRounds',
+    name: '💣 Munitions Explosives',
+    description: 'Les balles explosent (rayon 30px, 50% dégâts)',
+    rarity: 'legendary',
+    effect: (player) => {
+      player.explosiveRounds = true;
+      player.explosionRadius = 30;
+      player.explosionDamagePercent = 0.5;
+    }
+  },
+  multishot: {
+    id: 'multishot',
+    name: '🎆 Tir Multiple',
+    description: '+1 balle par tir',
+    rarity: 'legendary',
+    effect: (player) => {
+      player.extraBullets = (player.extraBullets || 0) + 1;
+    }
+  },
+  thorns: {
+    id: 'thorns',
+    name: '🛡️ Épines',
+    description: 'Renvoie 20% des dégâts reçus',
+    rarity: 'rare',
+    effect: (player) => {
+      player.thorns = (player.thorns || 0) + 0.20;
+    }
+  },
+  fullHeal: {
+    id: 'fullHeal',
+    name: '✨ Soin Complet',
+    description: 'Restaure toute votre vie',
+    rarity: 'common',
+    effect: (player) => {
+      player.health = player.maxHealth;
+    }
+  }
+};
+
 // Shop Items (Rogue-like)
 const SHOP_ITEMS = {
   permanent: {
@@ -300,6 +433,62 @@ const SHOP_ITEMS = {
 // Fonction utilitaire pour calculer la distance
 function distance(x1, y1, x2, y2) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
+// Générer 3 choix d'upgrades aléatoires avec pondération par rareté
+function generateUpgradeChoices() {
+  const upgradeKeys = Object.keys(LEVEL_UP_UPGRADES);
+  const choices = [];
+  const selectedKeys = new Set();
+
+  // Pondération par rareté : common: 60%, rare: 30%, legendary: 10%
+  while (choices.length < 3 && selectedKeys.size < upgradeKeys.length) {
+    const rand = Math.random();
+    let targetRarity;
+
+    if (rand < 0.60) {
+      targetRarity = 'common';
+    } else if (rand < 0.90) {
+      targetRarity = 'rare';
+    } else {
+      targetRarity = 'legendary';
+    }
+
+    // Trouver un upgrade de cette rareté qui n'a pas déjà été sélectionné
+    const availableUpgrades = upgradeKeys.filter(key =>
+      LEVEL_UP_UPGRADES[key].rarity === targetRarity && !selectedKeys.has(key)
+    );
+
+    if (availableUpgrades.length > 0) {
+      const selectedKey = availableUpgrades[Math.floor(Math.random() * availableUpgrades.length)];
+      selectedKeys.add(selectedKey);
+      choices.push({
+        id: selectedKey,
+        name: LEVEL_UP_UPGRADES[selectedKey].name,
+        description: LEVEL_UP_UPGRADES[selectedKey].description,
+        rarity: LEVEL_UP_UPGRADES[selectedKey].rarity
+      });
+    }
+  }
+
+  // Si on n'a pas réussi à avoir 3 choix avec la pondération, compléter avec n'importe quoi
+  while (choices.length < 3 && selectedKeys.size < upgradeKeys.length) {
+    const availableUpgrades = upgradeKeys.filter(key => !selectedKeys.has(key));
+    if (availableUpgrades.length > 0) {
+      const selectedKey = availableUpgrades[Math.floor(Math.random() * availableUpgrades.length)];
+      selectedKeys.add(selectedKey);
+      choices.push({
+        id: selectedKey,
+        name: LEVEL_UP_UPGRADES[selectedKey].name,
+        description: LEVEL_UP_UPGRADES[selectedKey].description,
+        rarity: LEVEL_UP_UPGRADES[selectedKey].rarity
+      });
+    } else {
+      break;
+    }
+  }
+
+  return choices;
 }
 
 // Génération procédurale de salle (Rogue-like)
@@ -560,6 +749,8 @@ function gameLoop() {
   for (let playerId in gameState.players) {
     const player = gameState.players[playerId];
 
+    if (!player.alive) continue;
+
     // Retour au pistolet si l'arme spéciale a expiré
     if (player.weaponTimer && now > player.weaponTimer) {
       player.weapon = 'pistol';
@@ -569,6 +760,14 @@ function gameLoop() {
     // Retour à la vitesse normale si le boost a expiré
     if (player.speedBoost && now > player.speedBoost) {
       player.speedBoost = null;
+    }
+
+    // Régénération de vie
+    if (player.regeneration > 0) {
+      if (!player.lastRegenTick || now - player.lastRegenTick >= 1000) {
+        player.health = Math.min(player.health + player.regeneration, player.maxHealth);
+        player.lastRegenTick = now;
+      }
     }
   }
 
@@ -646,7 +845,20 @@ function gameLoop() {
       for (let playerId in gameState.players) {
         const player = gameState.players[playerId];
         if (player.alive && distance(zombie.x, zombie.y, player.x, player.y) < zombie.size) {
-          player.health -= zombie.damage * 0.016; // Dégâts par frame
+          // Esquive
+          if (Math.random() < (player.dodgeChance || 0)) {
+            continue; // Esquive réussie
+          }
+
+          const damageDealt = zombie.damage * 0.016; // Dégâts par frame
+          player.health -= damageDealt;
+
+          // Épines (renvoyer des dégâts)
+          if (player.thorns > 0) {
+            const thornsDamage = damageDealt * player.thorns;
+            zombie.health -= thornsDamage;
+          }
+
           if (player.health <= 0) {
             player.health = 0;
             player.alive = false;
@@ -675,8 +887,49 @@ function gameLoop() {
     for (let zombieId in gameState.zombies) {
       const zombie = gameState.zombies[zombieId];
       if (distance(bullet.x, bullet.y, zombie.x, zombie.y) < zombie.size) {
+
+        // Vérifier si ce zombie a déjà été percé par cette balle
+        if (bullet.piercedZombies && bullet.piercedZombies.includes(zombieId)) {
+          continue;
+        }
+
         zombie.health -= bullet.damage;
-        delete gameState.bullets[bulletId];
+
+        // Vol de vie pour le joueur
+        if (bullet.playerId) {
+          const shooter = gameState.players[bullet.playerId];
+          if (shooter && shooter.lifeSteal > 0) {
+            const lifeStolen = bullet.damage * shooter.lifeSteal;
+            shooter.health = Math.min(shooter.health + lifeStolen, shooter.maxHealth);
+          }
+        }
+
+        // Balles perforantes
+        if (bullet.piercing > 0 && bullet.piercedZombies) {
+          bullet.piercedZombies.push(zombieId);
+          if (bullet.piercedZombies.length > bullet.piercing) {
+            delete gameState.bullets[bulletId];
+          }
+        } else {
+          delete gameState.bullets[bulletId];
+        }
+
+        // Balles explosives
+        if (bullet.explosiveRounds && bullet.explosionRadius > 0) {
+          // Créer explosion
+          createParticles(zombie.x, zombie.y, '#ff8800', 20);
+
+          // Infliger dégâts dans le rayon
+          for (let otherId in gameState.zombies) {
+            if (otherId !== zombieId) {
+              const other = gameState.zombies[otherId];
+              const dist = distance(zombie.x, zombie.y, other.x, other.y);
+              if (dist < bullet.explosionRadius) {
+                other.health -= bullet.damage * bullet.explosionDamagePercent;
+              }
+            }
+          }
+        }
 
         // Créer des particules de sang
         createParticles(zombie.x, zombie.y, zombie.color, 5);
@@ -784,7 +1037,8 @@ function gameLoop() {
     // Vérifier collision avec joueurs
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
-      if (player.alive && distance(loot.x, loot.y, player.x, player.y) < CONFIG.PLAYER_SIZE + CONFIG.LOOT_SIZE) {
+      const collectRadius = CONFIG.PLAYER_SIZE + CONFIG.LOOT_SIZE + (player.goldMagnetRadius || 0);
+      if (player.alive && distance(loot.x, loot.y, player.x, player.y) < collectRadius) {
         // Donner l'or et l'XP
         player.gold += loot.gold;
         player.xp += loot.xp;
@@ -798,12 +1052,13 @@ function gameLoop() {
         while (player.xp >= getXPForLevel(player.level)) {
           player.xp -= getXPForLevel(player.level);
           player.level++;
-          player.maxHealth += 10;
-          player.health = player.maxHealth; // Full heal au level up
+
+          // Générer 3 choix d'upgrades
+          const upgradeChoices = generateUpgradeChoices();
 
           io.to(playerId).emit('levelUp', {
             newLevel: player.level,
-            maxHealth: player.maxHealth
+            upgradeChoices: upgradeChoices
           });
         }
 
@@ -860,7 +1115,7 @@ io.on('connection', (socket) => {
     lastShot: 0,
     speedBoost: null,
     weaponTimer: null,
-    // Upgrades permanents
+    // Upgrades permanents (shop)
     upgrades: {
       maxHealth: 0,
       damage: 0,
@@ -869,7 +1124,20 @@ io.on('connection', (socket) => {
     },
     damageMultiplier: 1,
     speedMultiplier: 1,
-    fireRateMultiplier: 1
+    fireRateMultiplier: 1,
+    // Stats des upgrades de level-up
+    regeneration: 0,
+    bulletPiercing: 0,
+    lifeSteal: 0,
+    criticalChance: 0,
+    goldMagnetRadius: 0,
+    dodgeChance: 0,
+    explosiveRounds: false,
+    explosionRadius: 0,
+    explosionDamagePercent: 0,
+    extraBullets: 0,
+    thorns: 0,
+    lastRegenTick: Date.now()
   };
 
   // Envoyer la configuration au client
@@ -940,13 +1208,22 @@ io.on('connection', (socket) => {
 
     player.lastShot = now;
 
+    // Nombre total de balles (arme + extra bullets)
+    const totalBullets = weapon.bulletCount + (player.extraBullets || 0);
+
     // Créer les balles selon l'arme
-    for (let i = 0; i < weapon.bulletCount; i++) {
+    for (let i = 0; i < totalBullets; i++) {
       const bulletId = gameState.nextBulletId++;
       const spreadAngle = data.angle + (Math.random() - 0.5) * weapon.spread;
 
       // Appliquer le multiplicateur de dégâts
-      const damage = weapon.damage * (player.damageMultiplier || 1);
+      let damage = weapon.damage * (player.damageMultiplier || 1);
+
+      // Critique
+      const isCritical = Math.random() < (player.criticalChance || 0);
+      if (isCritical) {
+        damage *= 2;
+      }
 
       gameState.bullets[bulletId] = {
         id: bulletId,
@@ -956,7 +1233,12 @@ io.on('connection', (socket) => {
         vy: Math.sin(spreadAngle) * weapon.bulletSpeed,
         playerId: socket.id,
         damage: damage,
-        color: weapon.color
+        color: isCritical ? '#ff0000' : weapon.color,
+        piercing: player.bulletPiercing || 0,
+        piercedZombies: [],
+        explosiveRounds: player.explosiveRounds || false,
+        explosionRadius: player.explosionRadius || 0,
+        explosionDamagePercent: player.explosionDamagePercent || 0
       };
     }
   });
@@ -1002,6 +1284,22 @@ io.on('connection', (socket) => {
       // Recharger depuis la première salle
       loadRoom(0);
     }
+  });
+
+  // Sélectionner un upgrade au level up
+  socket.on('selectUpgrade', (data) => {
+    const player = gameState.players[socket.id];
+    if (!player || !player.alive) return;
+
+    const { upgradeId } = data;
+    const upgrade = LEVEL_UP_UPGRADES[upgradeId];
+
+    if (!upgrade) return;
+
+    // Appliquer l'effet de l'upgrade
+    upgrade.effect(player);
+
+    socket.emit('upgradeSelected', { success: true, upgradeId });
   });
 
   // Acheter un item dans le shop
