@@ -133,11 +133,44 @@ npm install
 
 ## Démarrage
 
+### Méthode 1 : Node.js classique
+
 ```bash
 npm start
 ```
 
 Ouvrez plusieurs onglets sur `http://localhost:3000` pour tester le multijoueur !
+
+### Méthode 2 : Docker 🐳
+
+**Avec Docker Compose (recommandé) :**
+
+```bash
+docker-compose up --build
+```
+
+**Ou avec Docker seul :**
+
+```bash
+# Construire l'image
+docker build -t zombie-game .
+
+# Lancer le conteneur
+docker run -p 3000:3000 zombie-game
+```
+
+Puis ouvrez `http://localhost:3000` dans votre navigateur !
+
+### Méthode 3 : Image Docker pré-construite (GitHub Container Registry) 🚀
+
+**Tester le jeu directement sans cloner le repo :**
+
+```bash
+docker pull ghcr.io/morgannito/zombie-jeu:latest
+docker run -p 3000:3000 ghcr.io/morgannito/zombie-jeu:latest
+```
+
+L'image Docker est automatiquement construite et publiée sur GitHub Container Registry à chaque push !
 
 ## Contrôles
 
