@@ -172,6 +172,39 @@ docker run -p 3000:3000 ghcr.io/morgannito/zombie-jeu:latest
 
 L'image Docker est automatiquement construite et publiée sur GitHub Container Registry à chaque push !
 
+### Méthode 4 : Déploiement Cloud (Tester en ligne) ☁️
+
+**Déployer en un clic sur un service gratuit :**
+
+#### Render (Recommandé - Gratuit)
+1. Créez un compte sur [render.com](https://render.com)
+2. Cliquez sur "New +" → "Web Service"
+3. Connectez votre repo GitHub `morgannito/zombie-jeu`
+4. Render détectera automatiquement le `render.yaml`
+5. Cliquez sur "Create Web Service"
+6. Attendez ~2 minutes, votre jeu sera accessible via une URL publique !
+
+#### Railway (Alternative gratuite)
+1. Créez un compte sur [railway.app](https://railway.app)
+2. Cliquez sur "New Project" → "Deploy from GitHub repo"
+3. Sélectionnez `morgannito/zombie-jeu`
+4. Railway détectera le Dockerfile automatiquement
+5. Générez un domaine public dans les settings
+6. Votre jeu est en ligne !
+
+#### Fly.io (Avec CLI)
+```bash
+# Installer flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Se connecter et déployer
+fly auth login
+fly launch --config fly.toml
+fly deploy
+```
+
+Une fois déployé, vous obtenez une URL publique pour jouer en ligne avec vos amis ! 🌐
+
 ## Contrôles
 
 - **WASD/ZQSD** ou **Flèches** : Déplacement
