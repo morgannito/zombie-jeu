@@ -14,7 +14,7 @@ Ce jeu suit les principes du genre rogue-like :
 ## Fonctionnalités
 
 ### Système de Salles (Rogue-like)
-- **5 salles par run** avec génération procédurale
+- **3 salles par run** avec génération procédurale (gameplay rapide et arcade)
 - Murs extérieurs et obstacles aléatoires (piliers, caisses)
 - Portes qui s'ouvrent après avoir tué le boss
 - Mini-map en temps réel affichant la salle complète
@@ -23,37 +23,37 @@ Ce jeu suit les principes du genre rogue-like :
 
 **Zombies Basiques :**
 - **Zombie Normal** (Vert 🟢)
-  - Vie: 80 | Vitesse: 2 | Dégâts: 8
-  - Drop: 5 gold, 10 XP
+  - Vie: 65 | Vitesse: 2 | Dégâts: 8
+  - Drop: 8 gold, 12 XP
 
 - **Zombie Rapide** (Jaune 🟡)
-  - Vie: 50 | Vitesse: 4 | Dégâts: 12
-  - Drop: 10 gold, 15 XP
+  - Vie: 45 | Vitesse: 4 | Dégâts: 12
+  - Drop: 15 gold, 18 XP
 
 - **Zombie Tank** (Orange 🟠)
-  - Vie: 200 | Vitesse: 1 | Dégâts: 20
-  - Drop: 20 gold, 30 XP
+  - Vie: 170 | Vitesse: 1 | Dégâts: 20
+  - Drop: 30 gold, 35 XP
 
 **Zombies Spéciaux :**
 - **Zombie Explosif** (Magenta 💣)
-  - Vie: 60 | Vitesse: 2.5 | Dégâts: 10
-  - Drop: 15 gold, 20 XP
+  - Vie: 50 | Vitesse: 2.5 | Dégâts: 10
+  - Drop: 20 gold, 25 XP
   - **DANGER** : Explose à la mort dans un rayon de 100px et inflige 30 dégâts !
 
 - **Zombie Soigneur** (Cyan +)
-  - Vie: 100 | Vitesse: 1.5 | Dégâts: 5
-  - Drop: 25 gold, 25 XP
+  - Vie: 85 | Vitesse: 1.5 | Dégâts: 5
+  - Drop: 35 gold, 30 XP
   - **Capacité** : Soigne les zombies proches de 10 PV toutes les 3 secondes (rayon: 150px)
 
 - **Zombie Ralentisseur** (Violet ⏱)
-  - Vie: 90 | Vitesse: 1.8 | Dégâts: 6
-  - Drop: 18 gold, 22 XP
+  - Vie: 75 | Vitesse: 1.8 | Dégâts: 6
+  - Drop: 25 gold, 28 XP
   - **Capacité** : Ralentit les joueurs de 50% dans un rayon de 120px
 
 **Boss :**
 - **Boss Zombie** (Rouge 💀) - Fin de salle
-  - Vie: 500 | Vitesse: 1.5 | Dégâts: 25
-  - Drop: 100 gold, 100 XP
+  - Vie: 400 | Vitesse: 1.5 | Dégâts: 25
+  - Drop: 150 gold, 120 XP
   - Ouvre la porte vers la salle suivante
 
 ### Système de Progression & Level-Up
@@ -92,15 +92,15 @@ Appuyez sur **TAB** pour voir :
 - Vos upgrades permanents du shop
 - Vos capacités spéciales (régénération, critique, esquive, etc.)
 
-### Armes
+### Armes (Cadence améliorée pour un gameplay rapide)
 - **Pistolet** : Arme de base, tir rapide et précis
-  - Dégâts: 34 | Cadence: 300ms | 1 projectile
+  - Dégâts: 40 | Cadence: 180ms | 1 projectile
 
 - **Shotgun** : 5 projectiles avec dispersion
-  - Dégâts: 20/projectile | Cadence: 800ms | Dispersion: 0.3
+  - Dégâts: 25/projectile | Cadence: 600ms | Dispersion: 0.3
 
-- **Mitraillette** : Cadence de tir très élevée
-  - Dégâts: 25 | Cadence: 100ms | Légère dispersion
+- **Mitraillette** : Cadence de tir extrêmement élevée
+  - Dégâts: 30 | Cadence: 80ms | Légère dispersion
 
 ### Power-ups Temporaires
 - **Santé** (+50 PV) : Restaure la vie
@@ -216,7 +216,7 @@ Une fois déployé, vous obtenez une URL publique pour jouer en ligne avec vos a
 ## Comment Jouer (Guide Rogue-like)
 
 1. **Survivez à chaque salle**
-   - Tuez les 10 zombies qui spawn progressivement
+   - Tuez les 8 zombies qui spawn progressivement (gameplay plus rapide)
    - Affrontez le boss zombie qui apparaît ensuite
    - La porte s'ouvre après la mort du boss
 
@@ -233,7 +233,7 @@ Une fois déployé, vous obtenez une URL publique pour jouer en ligne avec vos a
 
 4. **Progressez à travers les salles**
    - Passez par la porte verte en haut
-   - 5 salles par run complet
+   - 3 salles par run complet (action rapide et intense)
    - Chaque salle a des obstacles différents
 
 5. **Permadeath**
@@ -247,13 +247,14 @@ Une fois déployé, vous obtenez une URL publique pour jouer en ligne avec vos a
    - Partagez le loot et l'XP
    - Stratégie d'équipe contre les boss
 
-## Système de Vagues par Salle
+## Système de Vagues par Salle (Optimisé pour un gameplay rapide)
 
-- **10 zombies** spawns progressifs par salle
-- **1 boss zombie** après les 10 zombies
+- **8 zombies** spawns progressifs par salle (réduit pour plus de rapidité)
+- **1 boss zombie** après les 8 zombies
 - **Types variés** : Mélange de basiques et spéciaux
 - **Spawn limité** : Maximum 15 zombies simultanés
-- **Interval** : Nouveau zombie toutes les 3 secondes
+- **Interval** : Nouveau zombie toutes les 2.5 secondes (plus rapide)
+- **Drops augmentés** : +50% d'or et +20% d'XP sur tous les zombies
 
 ### Stratégies contre les Zombies Spéciaux
 

@@ -45,7 +45,7 @@ const CONFIG = {
   PLAYER_SPEED: 6.5, // Augmenté pour plus de fluidité
   PLAYER_SIZE: 20,
   ZOMBIE_SIZE: 25,
-  ZOMBIE_SPAWN_INTERVAL: 3000,
+  ZOMBIE_SPAWN_INTERVAL: 2500, // Spawns plus rapides (3000 -> 2500ms)
   MAX_ZOMBIES: 15,
   BULLET_SPEED: 10,
   BULLET_DAMAGE: 34,
@@ -53,39 +53,39 @@ const CONFIG = {
   PLAYER_MAX_HEALTH: 100,
   POWERUP_SPAWN_INTERVAL: 15000,
   POWERUP_SIZE: 15,
-  ZOMBIES_PER_ROOM: 10,
+  ZOMBIES_PER_ROOM: 8, // Réduit de 10 à 8 zombies par salle
   LOOT_SIZE: 10,
   DOOR_WIDTH: 80,
-  ROOMS_PER_RUN: 5
+  ROOMS_PER_RUN: 3 // Réduit de 5 à 3 salles pour un jeu plus rapide
 };
 
-// Types d'armes
+// Types d'armes (Améliorées pour un gameplay plus rapide)
 const WEAPONS = {
   pistol: {
     name: 'Pistolet',
-    damage: 34,
-    fireRate: 300,
-    bulletSpeed: 12,
+    damage: 40, // +6 dégâts
+    fireRate: 180, // Plus rapide (300 -> 180ms)
+    bulletSpeed: 14,
     bulletCount: 1,
     spread: 0,
     color: '#ffff00'
   },
   shotgun: {
     name: 'Shotgun',
-    damage: 20,
-    fireRate: 800,
-    bulletSpeed: 10,
+    damage: 25, // +5 dégâts par projectile
+    fireRate: 600, // Plus rapide (800 -> 600ms)
+    bulletSpeed: 11,
     bulletCount: 5,
     spread: 0.3,
     color: '#ff6600'
   },
   machinegun: {
     name: 'Mitraillette',
-    damage: 25,
-    fireRate: 100,
-    bulletSpeed: 15,
+    damage: 30, // +5 dégâts
+    fireRate: 80, // Plus rapide (100 -> 80ms)
+    bulletSpeed: 16,
     bulletCount: 1,
-    spread: 0.1,
+    spread: 0.08,
     color: '#00ffff'
   }
 };
@@ -128,81 +128,81 @@ const POWERUP_TYPES = {
 const ZOMBIE_TYPES = {
   normal: {
     name: 'Zombie Normal',
-    health: 80,
+    health: 65, // Réduit (80 -> 65)
     speed: 2,
     damage: 8,
     color: '#00ff00',
     size: 25,
-    goldDrop: 5,
-    xpDrop: 10
+    goldDrop: 8, // Plus d'or (5 -> 8)
+    xpDrop: 12 // Plus d'XP (10 -> 12)
   },
   fast: {
     name: 'Zombie Rapide',
-    health: 50,
+    health: 45, // Réduit (50 -> 45)
     speed: 4,
     damage: 12,
     color: '#ffff00',
     size: 20,
-    goldDrop: 10,
-    xpDrop: 15
+    goldDrop: 15, // Plus d'or (10 -> 15)
+    xpDrop: 18 // Plus d'XP (15 -> 18)
   },
   tank: {
     name: 'Zombie Tank',
-    health: 200,
+    health: 170, // Réduit (200 -> 170)
     speed: 1,
     damage: 20,
     color: '#ff6600',
     size: 35,
-    goldDrop: 20,
-    xpDrop: 30
+    goldDrop: 30, // Plus d'or (20 -> 30)
+    xpDrop: 35 // Plus d'XP (30 -> 35)
   },
   explosive: {
     name: 'Zombie Explosif',
-    health: 60,
+    health: 50, // Réduit (60 -> 50)
     speed: 2.5,
     damage: 10,
     color: '#ff00ff',
     size: 22,
-    goldDrop: 15,
-    xpDrop: 20,
+    goldDrop: 20, // Plus d'or (15 -> 20)
+    xpDrop: 25, // Plus d'XP (20 -> 25)
     explosionRadius: 100,
     explosionDamage: 30
   },
   healer: {
     name: 'Zombie Soigneur',
-    health: 100,
+    health: 85, // Réduit (100 -> 85)
     speed: 1.5,
     damage: 5,
     color: '#00ffff',
     size: 28,
-    goldDrop: 25,
-    xpDrop: 25,
+    goldDrop: 35, // Plus d'or (25 -> 35)
+    xpDrop: 30, // Plus d'XP (25 -> 30)
     healAmount: 10,
     healRadius: 150,
     healCooldown: 3000
   },
   slower: {
     name: 'Zombie Ralentisseur',
-    health: 90,
+    health: 75, // Réduit (90 -> 75)
     speed: 1.8,
     damage: 6,
     color: '#8800ff',
     size: 26,
-    goldDrop: 18,
-    xpDrop: 22,
+    goldDrop: 25, // Plus d'or (18 -> 25)
+    xpDrop: 28, // Plus d'XP (22 -> 28)
     slowRadius: 120,
     slowAmount: 0.5,
     slowDuration: 2000
   },
   boss: {
     name: 'Boss Zombie',
-    health: 500,
+    health: 400, // Réduit (500 -> 400)
     speed: 1.5,
     damage: 25,
     color: '#ff0000',
     size: 50,
-    goldDrop: 100,
-    xpDrop: 100
+    goldDrop: 150, // Plus d'or (100 -> 150)
+    xpDrop: 120 // Plus d'XP (100 -> 120)
   }
 };
 
