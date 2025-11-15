@@ -36,9 +36,11 @@ let config = {};
 let weapons = {};
 let powerupTypes = {};
 let zombieTypes = {};
+let shopItems = {};
 let keys = {};
 let mouse = { x: 0, y: 0 };
 let camera = { x: 0, y: 0 };
+let shopOpen = false;
 
 // Input clavier
 window.addEventListener('keydown', (e) => {
@@ -79,6 +81,7 @@ socket.on('init', (data) => {
     weapons = data.weapons;
     powerupTypes = data.powerupTypes;
     zombieTypes = data.zombieTypes;
+    shopItems = data.shopItems;
     console.log('Connecté au jeu! ID:', playerId);
 });
 
@@ -98,9 +101,13 @@ socket.on('levelUp', (data) => {
     showLevelUpNotification(data.newLevel);
 });
 
-// Porte ouverte
+// Porte ouverte - Afficher le shop
 socket.on('doorOpened', () => {
     console.log('La porte est ouverte!');
+    // Afficher le shop après avoir tué le boss
+    setTimeout(() => {
+        showShop();
+    }, 1000);
 });
 
 // Changement de salle
@@ -212,8 +219,13 @@ function updatePlayerPosition() {
         dy *= 0.707;
     }
 
-    // Appliquer le boost de vitesse
+    // Appliquer les multiplicateurs de vitesse
     let speed = config.PLAYER_SPEED;
+
+    // Multiplicateur permanent
+    speed *= (player.speedMultiplier || 1);
+
+    // Boost temporaire
     if (player.speedBoost && Date.now() < player.speedBoost) {
         speed *= 1.5;
     }
@@ -589,6 +601,108 @@ function drawMinimap() {
     minimapCtx.lineWidth = 2;
     minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
 }
+
+// Afficher le shop
+function showShop() {
+    const player = gameState.players[playerId];
+    if (!player || !player.alive) return;
+
+    shopOpen = true;
+    document.getElementById('shop').style.display = 'block';
+    populateShop();
+}
+
+// Cacher le shop
+function hideShop() {
+    shopOpen = false;
+    document.getElementById('shop').style.display = 'none';
+}
+
+// Bouton fermer le shop
+document.getElementById('shop-close-btn').addEventListener('click', () => {
+    hideShop();
+});
+
+// Populate le shop avec les items
+function populateShop() {
+    const player = gameState.players[playerId];
+    if (!player) return;
+
+    // Mettre à jour l'or affiché
+    document.getElementById('shop-gold').textContent = player.gold || 0;
+
+    // Populate les upgrades permanents
+    const permanentContainer = document.getElementById('permanent-upgrades');
+    permanentContainer.innerHTML = '';
+
+    for (let key in shopItems.permanent) {
+        const item = shopItems.permanent[key];
+        const currentLevel = player.upgrades[key] || 0;
+        const cost = item.baseCost + (currentLevel * item.costIncrease);
+        const isMaxed = currentLevel >= item.maxLevel;
+        const canAfford = player.gold >= cost;
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `shop-item ${isMaxed ? 'maxed' : ''}`;
+
+        itemDiv.innerHTML = `
+            <div class="shop-item-info">
+                <div class="shop-item-name">${item.name}</div>
+                <div class="shop-item-desc">${item.description}</div>
+                <div class="shop-item-level">Niveau: ${currentLevel}/${item.maxLevel}</div>
+            </div>
+            <div class="shop-item-buy">
+                <div class="shop-item-price">${isMaxed ? 'MAX' : cost + ' 💰'}</div>
+                <button class="shop-buy-btn" ${isMaxed || !canAfford ? 'disabled' : ''}
+                        onclick="buyItem('${key}', 'permanent')">
+                    ${isMaxed ? 'MAX' : 'Acheter'}
+                </button>
+            </div>
+        `;
+
+        permanentContainer.appendChild(itemDiv);
+    }
+
+    // Populate les items temporaires
+    const temporaryContainer = document.getElementById('temporary-items');
+    temporaryContainer.innerHTML = '';
+
+    for (let key in shopItems.temporary) {
+        const item = shopItems.temporary[key];
+        const canAfford = player.gold >= item.cost;
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'shop-item';
+
+        itemDiv.innerHTML = `
+            <div class="shop-item-info">
+                <div class="shop-item-name">${item.name}</div>
+                <div class="shop-item-desc">${item.description}</div>
+            </div>
+            <div class="shop-item-buy">
+                <div class="shop-item-price">${item.cost} 💰</div>
+                <button class="shop-buy-btn" ${!canAfford ? 'disabled' : ''}
+                        onclick="buyItem('${key}', 'temporary')">
+                    Acheter
+                </button>
+            </div>
+        `;
+
+        temporaryContainer.appendChild(itemDiv);
+    }
+}
+
+// Acheter un item
+window.buyItem = function(itemId, category) {
+    socket.emit('buyItem', { itemId, category });
+};
+
+// Mise à jour du shop après achat
+socket.on('shopUpdate', (data) => {
+    if (data.success && shopOpen) {
+        populateShop();
+    }
+});
 
 // Boucle de jeu
 function gameLoop() {

@@ -168,6 +168,97 @@ const ZOMBIE_TYPES = {
   }
 };
 
+// Shop Items (Rogue-like)
+const SHOP_ITEMS = {
+  permanent: {
+    maxHealth: {
+      id: 'maxHealth',
+      name: '❤️ Vie Maximum',
+      description: '+20 PV max permanents',
+      baseCost: 50,
+      costIncrease: 25,
+      maxLevel: 10,
+      effect: (player) => {
+        player.maxHealth += 20;
+        player.health = player.maxHealth; // Heal complet
+      }
+    },
+    damage: {
+      id: 'damage',
+      name: '⚔️ Dégâts',
+      description: '+10% dégâts permanents',
+      baseCost: 75,
+      costIncrease: 35,
+      maxLevel: 5,
+      effect: (player) => {
+        player.damageMultiplier = (player.damageMultiplier || 1) + 0.1;
+      }
+    },
+    speed: {
+      id: 'speed',
+      name: '👟 Vitesse',
+      description: '+15% vitesse permanente',
+      baseCost: 60,
+      costIncrease: 30,
+      maxLevel: 5,
+      effect: (player) => {
+        player.speedMultiplier = (player.speedMultiplier || 1) + 0.15;
+      }
+    },
+    fireRate: {
+      id: 'fireRate',
+      name: '🔫 Cadence de Tir',
+      description: '-10% cooldown armes',
+      baseCost: 80,
+      costIncrease: 40,
+      maxLevel: 5,
+      effect: (player) => {
+        player.fireRateMultiplier = (player.fireRateMultiplier || 1) - 0.1;
+      }
+    }
+  },
+  temporary: {
+    heal: {
+      id: 'heal',
+      name: '💚 Soin Complet',
+      description: 'Restaure toute votre vie',
+      cost: 30,
+      effect: (player) => {
+        player.health = player.maxHealth;
+      }
+    },
+    shotgun: {
+      id: 'shotgun',
+      name: '🔫 Shotgun',
+      description: 'Shotgun pour la salle actuelle',
+      cost: 40,
+      effect: (player) => {
+        player.weapon = 'shotgun';
+        player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
+      }
+    },
+    machinegun: {
+      id: 'machinegun',
+      name: '🔫 Mitraillette',
+      description: 'Mitraillette pour la salle actuelle',
+      cost: 50,
+      effect: (player) => {
+        player.weapon = 'machinegun';
+        player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
+      }
+    },
+    speedBoost: {
+      id: 'speedBoost',
+      name: '⚡ Boost Vitesse',
+      description: 'Vitesse x2 pour la salle actuelle',
+      cost: 35,
+      effect: (player) => {
+        player.speedBoost = Date.now() + 999999; // Jusqu'à la fin de la salle
+      }
+    }
+  }
+};
+
 // Fonction utilitaire pour calculer la distance
 function distance(x1, y1, x2, y2) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
@@ -667,7 +758,17 @@ io.on('connection', (socket) => {
     weapon: 'pistol',
     lastShot: 0,
     speedBoost: null,
-    weaponTimer: null
+    weaponTimer: null,
+    // Upgrades permanents
+    upgrades: {
+      maxHealth: 0,
+      damage: 0,
+      speed: 0,
+      fireRate: 0
+    },
+    damageMultiplier: 1,
+    speedMultiplier: 1,
+    fireRateMultiplier: 1
   };
 
   // Envoyer la configuration au client
@@ -677,6 +778,7 @@ io.on('connection', (socket) => {
     weapons: WEAPONS,
     powerupTypes: POWERUP_TYPES,
     zombieTypes: ZOMBIE_TYPES,
+    shopItems: SHOP_ITEMS,
     walls: gameState.walls,
     rooms: gameState.rooms.length,
     currentRoom: gameState.currentRoom
@@ -729,8 +831,11 @@ io.on('connection', (socket) => {
     const now = Date.now();
     const weapon = WEAPONS[player.weapon] || WEAPONS.pistol;
 
+    // Appliquer le multiplicateur de cadence de tir
+    const fireRate = weapon.fireRate * (player.fireRateMultiplier || 1);
+
     // Vérifier le cooldown de l'arme
-    if (now - player.lastShot < weapon.fireRate) return;
+    if (now - player.lastShot < fireRate) return;
 
     player.lastShot = now;
 
@@ -739,6 +844,9 @@ io.on('connection', (socket) => {
       const bulletId = gameState.nextBulletId++;
       const spreadAngle = data.angle + (Math.random() - 0.5) * weapon.spread;
 
+      // Appliquer le multiplicateur de dégâts
+      const damage = weapon.damage * (player.damageMultiplier || 1);
+
       gameState.bullets[bulletId] = {
         id: bulletId,
         x: player.x,
@@ -746,7 +854,7 @@ io.on('connection', (socket) => {
         vx: Math.cos(spreadAngle) * weapon.bulletSpeed,
         vy: Math.sin(spreadAngle) * weapon.bulletSpeed,
         playerId: socket.id,
-        damage: weapon.damage,
+        damage: damage,
         color: weapon.color
       };
     }
@@ -756,23 +864,101 @@ io.on('connection', (socket) => {
   socket.on('respawn', () => {
     const player = gameState.players[socket.id];
     if (player) {
+      // Sauvegarder les upgrades permanents
+      const savedUpgrades = { ...player.upgrades };
+      const savedMultipliers = {
+        damage: player.damageMultiplier,
+        speed: player.speedMultiplier,
+        fireRate: player.fireRateMultiplier
+      };
+
+      // Calculer la vie maximale avec les upgrades
+      const baseMaxHealth = CONFIG.PLAYER_MAX_HEALTH;
+      const upgradeHealth = (savedUpgrades.maxHealth || 0) * 20;
+      const totalMaxHealth = baseMaxHealth + upgradeHealth;
+
       // Réinitialiser le run (Permadeath mais garde les upgrades permanents)
       player.x = CONFIG.ROOM_WIDTH / 2;
       player.y = CONFIG.ROOM_HEIGHT - 100;
-      player.health = CONFIG.PLAYER_MAX_HEALTH + (gameState.permanentUpgrades.maxHealthUpgrade * 10);
-      player.maxHealth = CONFIG.PLAYER_MAX_HEALTH + (gameState.permanentUpgrades.maxHealthUpgrade * 10);
+      player.health = totalMaxHealth;
+      player.maxHealth = totalMaxHealth;
       player.alive = true;
       player.level = 1;
       player.xp = 0;
-      player.gold = 0; // L'or est perdu (on peut modifier pour garder)
+      player.gold = 0; // L'or est perdu au respawn
       player.score = 0;
       player.weapon = 'pistol';
       player.speedBoost = null;
       player.weaponTimer = null;
       player.lastShot = 0;
 
+      // Restaurer les upgrades permanents
+      player.upgrades = savedUpgrades;
+      player.damageMultiplier = savedMultipliers.damage;
+      player.speedMultiplier = savedMultipliers.speed;
+      player.fireRateMultiplier = savedMultipliers.fireRate;
+
       // Recharger depuis la première salle
       loadRoom(0);
+    }
+  });
+
+  // Acheter un item dans le shop
+  socket.on('buyItem', (data) => {
+    const player = gameState.players[socket.id];
+    if (!player || !player.alive) return;
+
+    const { itemId, category } = data;
+
+    if (category === 'permanent') {
+      const item = SHOP_ITEMS.permanent[itemId];
+      if (!item) return;
+
+      const currentLevel = player.upgrades[itemId] || 0;
+
+      // Vérifier si déjà au max
+      if (currentLevel >= item.maxLevel) {
+        socket.emit('shopUpdate', { success: false, message: 'Niveau maximum atteint' });
+        return;
+      }
+
+      // Calculer le coût
+      const cost = item.baseCost + (currentLevel * item.costIncrease);
+
+      // Vérifier si le joueur a assez d'or
+      if (player.gold < cost) {
+        socket.emit('shopUpdate', { success: false, message: 'Or insuffisant' });
+        return;
+      }
+
+      // Déduire l'or
+      player.gold -= cost;
+
+      // Augmenter le niveau de l'upgrade
+      player.upgrades[itemId] = currentLevel + 1;
+
+      // Appliquer l'effet
+      item.effect(player);
+
+      socket.emit('shopUpdate', { success: true, itemId, category });
+
+    } else if (category === 'temporary') {
+      const item = SHOP_ITEMS.temporary[itemId];
+      if (!item) return;
+
+      // Vérifier si le joueur a assez d'or
+      if (player.gold < item.cost) {
+        socket.emit('shopUpdate', { success: false, message: 'Or insuffisant' });
+        return;
+      }
+
+      // Déduire l'or
+      player.gold -= item.cost;
+
+      // Appliquer l'effet
+      item.effect(player);
+
+      socket.emit('shopUpdate', { success: true, itemId, category });
     }
   });
 

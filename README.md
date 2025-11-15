@@ -105,21 +105,28 @@ Ouvrez plusieurs onglets sur `http://localhost:3000` pour tester le multijoueur 
    - La porte s'ouvre après la mort du boss
 
 2. **Ramassez le loot**
-   - Pièces d'or pour acheter des upgrades (à venir)
+   - Pièces d'or pour acheter des upgrades dans le shop
    - XP pour monter de niveau pendant le run
    - Power-ups temporaires pour vous aider
 
-3. **Progressez à travers les salles**
+3. **Utilisez le shop**
+   - Le shop s'ouvre automatiquement après avoir tué le boss
+   - Achetez des upgrades permanents (conservés après la mort)
+   - Achetez des items temporaires pour la salle actuelle
+   - Cliquez sur "Continuer" pour passer à la salle suivante
+
+4. **Progressez à travers les salles**
    - Passez par la porte verte en haut
    - 5 salles par run complet
    - Chaque salle a des obstacles différents
 
-4. **Permadeath**
+5. **Permadeath**
    - À la mort, vous perdez tout sauf les upgrades permanents
    - Recommencez depuis la salle 1
    - Votre niveau et votre or sont réinitialisés
+   - Vos multiplicateurs d'upgrades sont conservés !
 
-5. **Coopération multijoueur**
+6. **Coopération multijoueur**
    - Jouez avec d'autres pour survivre plus longtemps
    - Partagez le loot et l'XP
    - Stratégie d'équipe contre les boss
@@ -132,15 +139,26 @@ Ouvrez plusieurs onglets sur `http://localhost:3000` pour tester le multijoueur 
 - **Spawn limité** : Maximum 15 zombies simultanés
 - **Interval** : Nouveau zombie toutes les 3 secondes
 
-## Progression Permanente
+## Progression Permanente & Shop
 
-Le système conserve entre les runs :
-- **Max Health Upgrades** : Augmente la vie de base
-- **Damage Upgrades** : Augmente les dégâts des armes
-- **Speed Upgrades** : Augmente la vitesse de déplacement
-- **Gold Multiplier** : Multiplie l'or gagné
+### Système de Shop
+Le shop s'ouvre automatiquement après avoir tué le boss de chaque salle. Vous pouvez y dépenser votre or pour acheter :
 
-*(Shop à implémenter pour dépenser l'or)*
+**Upgrades Permanents** (conservés après la mort) :
+- **❤️ Vie Maximum** : +20 PV max permanents
+  - Coût de base : 50 gold | +25 par niveau | Max : Niveau 10
+- **⚔️ Dégâts** : +10% dégâts permanents
+  - Coût de base : 75 gold | +35 par niveau | Max : Niveau 5
+- **👟 Vitesse** : +15% vitesse permanente
+  - Coût de base : 60 gold | +30 par niveau | Max : Niveau 5
+- **🔫 Cadence de Tir** : -10% cooldown armes
+  - Coût de base : 80 gold | +40 par niveau | Max : Niveau 5
+
+**Items Temporaires** (pour la salle actuelle) :
+- **💚 Soin Complet** : Restaure toute votre vie (30 gold)
+- **🔫 Shotgun** : Shotgun pour la salle actuelle (40 gold)
+- **🔫 Mitraillette** : Mitraillette pour la salle actuelle (50 gold)
+- **⚡ Boost Vitesse** : Vitesse x2 pour la salle actuelle (35 gold)
 
 ## Architecture Technique
 
@@ -166,13 +184,15 @@ Le système conserve entre les runs :
 
 ## Prochaines Fonctionnalités
 
-- [ ] Shop entre les salles pour dépenser l'or
-- [ ] Upgrades permanents achetables
-- [ ] Plus de types de zombies (explosif, soigneur, etc.)
+- [x] Shop entre les salles pour dépenser l'or ✅
+- [x] Upgrades permanents achetables ✅
+- [ ] Sons et effets audio (tirs, impacts, musique)
+- [ ] Plus de types de zombies (explosif, soigneur, ralentisseur, etc.)
 - [ ] Armes permanentes à débloquer
 - [ ] Système de classes de personnages
 - [ ] Leaderboard multijoueur
 - [ ] Achievements et unlocks
+- [ ] Sauvegarde des upgrades en base de données
 
 ## Technologies
 
