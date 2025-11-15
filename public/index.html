@@ -63,11 +63,33 @@
             </div>
         </div>
 
+        <div id="stats-panel" style="display: none;">
+            <div class="stats-panel-header">
+                <h2>📊 STATISTIQUES</h2>
+                <p class="stats-hint">Appuyez sur TAB pour fermer</p>
+            </div>
+            <div class="stats-panel-content">
+                <div class="stats-section">
+                    <h3>🎯 Stats de Base</h3>
+                    <div id="base-stats"></div>
+                </div>
+                <div class="stats-section">
+                    <h3>⬆️ Améliorations Actives</h3>
+                    <div id="active-upgrades"></div>
+                </div>
+                <div class="stats-section">
+                    <h3>🛒 Upgrades Permanents (Shop)</h3>
+                    <div id="permanent-shop-upgrades"></div>
+                </div>
+            </div>
+        </div>
+
         <div id="instructions">
             <h3>Contrôles</h3>
             <p><strong>WASD</strong> ou <strong>Flèches</strong> : Déplacement</p>
             <p><strong>Souris</strong> : Viser</p>
             <p><strong>Clic gauche</strong> : Tirer</p>
+            <p><strong>TAB</strong> : Voir les statistiques</p>
         </div>
 
         <canvas id="minimap"></canvas>

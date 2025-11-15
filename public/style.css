@@ -497,3 +497,97 @@ body {
         opacity: 0.7;
     }
 }
+
+/* Stats Panel */
+#stats-panel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 900px;
+    max-height: 80vh;
+    background: rgba(10, 10, 30, 0.98);
+    border: 3px solid #00ffff;
+    border-radius: 15px;
+    pointer-events: auto;
+    overflow-y: auto;
+    z-index: 120;
+    box-shadow: 0 0 40px rgba(0, 255, 255, 0.5);
+}
+
+.stats-panel-header {
+    background: linear-gradient(135deg, #001a33 0%, #003366 100%);
+    padding: 20px;
+    border-bottom: 2px solid #00ffff;
+    text-align: center;
+}
+
+.stats-panel-header h2 {
+    color: #00ffff;
+    font-size: 32px;
+    margin-bottom: 5px;
+    text-shadow: 0 0 10px #00ffff;
+}
+
+.stats-hint {
+    color: #aaa;
+    font-size: 14px;
+    margin: 0;
+}
+
+.stats-panel-content {
+    padding: 20px;
+}
+
+.stats-section {
+    margin-bottom: 30px;
+}
+
+.stats-section h3 {
+    color: #ffd700;
+    font-size: 20px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #ffd700;
+    padding-bottom: 8px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    margin-bottom: 5px;
+    border-radius: 5px;
+    border-left: 3px solid #00ff00;
+}
+
+.stat-item.rare {
+    border-left-color: #2196f3;
+}
+
+.stat-item.legendary {
+    border-left-color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.stat-name {
+    color: #fff;
+    font-weight: bold;
+}
+
+.stat-value {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+.stat-value.multiplier {
+    color: #ffaa00;
+}
+
+.no-upgrades {
+    color: #888;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}

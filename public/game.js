@@ -45,6 +45,12 @@ let shopOpen = false;
 // Input clavier
 window.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
+
+    // Ouvrir/Fermer le panneau de stats avec TAB
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        toggleStatsPanel();
+    }
 });
 
 window.addEventListener('keyup', (e) => {
@@ -782,6 +788,198 @@ socket.on('shopUpdate', (data) => {
         populateShop();
     }
 });
+
+// Toggle stats panel
+function toggleStatsPanel() {
+    const statsPanel = document.getElementById('stats-panel');
+    const isVisible = statsPanel.style.display === 'block';
+
+    if (isVisible) {
+        statsPanel.style.display = 'none';
+    } else {
+        statsPanel.style.display = 'block';
+        updateStatsPanel();
+    }
+}
+
+// Update stats panel
+function updateStatsPanel() {
+    const player = gameState.players[playerId];
+    if (!player) return;
+
+    // Stats de base
+    const baseStatsContainer = document.getElementById('base-stats');
+    baseStatsContainer.innerHTML = `
+        <div class="stat-item">
+            <span class="stat-name">❤️ Vie</span>
+            <span class="stat-value">${Math.round(player.health)} / ${player.maxHealth}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-name">⚔️ Multiplicateur de Dégâts</span>
+            <span class="stat-value multiplier">x${(player.damageMultiplier || 1).toFixed(2)}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-name">👟 Multiplicateur de Vitesse</span>
+            <span class="stat-value multiplier">x${(player.speedMultiplier || 1).toFixed(2)}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-name">🔫 Multiplicateur Cadence</span>
+            <span class="stat-value multiplier">x${(player.fireRateMultiplier || 1).toFixed(2)}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-name">📊 Niveau</span>
+            <span class="stat-value">${player.level || 1}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-name">💰 Or</span>
+            <span class="stat-value">${player.gold || 0}</span>
+        </div>
+    `;
+
+    // Améliorations actives (level-up)
+    const activeUpgradesContainer = document.getElementById('active-upgrades');
+    let hasActiveUpgrades = false;
+    let upgradesHTML = '';
+
+    if (player.regeneration > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item rare">
+                <span class="stat-name">💚 Régénération</span>
+                <span class="stat-value">+${player.regeneration} PV/sec</span>
+            </div>
+        `;
+    }
+
+    if (player.bulletPiercing > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item rare">
+                <span class="stat-name">🎯 Balles Perforantes</span>
+                <span class="stat-value">+${player.bulletPiercing} ennemis</span>
+            </div>
+        `;
+    }
+
+    if (player.lifeSteal > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item rare">
+                <span class="stat-name">🩸 Vol de Vie</span>
+                <span class="stat-value">${(player.lifeSteal * 100).toFixed(0)}%</span>
+            </div>
+        `;
+    }
+
+    if (player.criticalChance > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item rare">
+                <span class="stat-name">💥 Chance Critique</span>
+                <span class="stat-value">${(player.criticalChance * 100).toFixed(0)}%</span>
+            </div>
+        `;
+    }
+
+    if (player.goldMagnetRadius > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item">
+                <span class="stat-name">💰 Aimant à Or</span>
+                <span class="stat-value">+${player.goldMagnetRadius}px</span>
+            </div>
+        `;
+    }
+
+    if (player.dodgeChance > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item rare">
+                <span class="stat-name">🌀 Esquive</span>
+                <span class="stat-value">${(player.dodgeChance * 100).toFixed(0)}%</span>
+            </div>
+        `;
+    }
+
+    if (player.explosiveRounds) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item legendary">
+                <span class="stat-name">💣 Munitions Explosives</span>
+                <span class="stat-value">Rayon ${player.explosionRadius}px</span>
+            </div>
+        `;
+    }
+
+    if (player.extraBullets > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item legendary">
+                <span class="stat-name">🎆 Balles Supplémentaires</span>
+                <span class="stat-value">+${player.extraBullets}</span>
+            </div>
+        `;
+    }
+
+    if (player.thorns > 0) {
+        hasActiveUpgrades = true;
+        upgradesHTML += `
+            <div class="stat-item rare">
+                <span class="stat-name">🛡️ Épines</span>
+                <span class="stat-value">${(player.thorns * 100).toFixed(0)}%</span>
+            </div>
+        `;
+    }
+
+    activeUpgradesContainer.innerHTML = hasActiveUpgrades ? upgradesHTML : '<div class="no-upgrades">Aucune amélioration active</div>';
+
+    // Upgrades permanents du shop
+    const shopUpgradesContainer = document.getElementById('permanent-shop-upgrades');
+    let hasShopUpgrades = false;
+    let shopHTML = '';
+
+    if (player.upgrades && player.upgrades.maxHealth > 0) {
+        hasShopUpgrades = true;
+        shopHTML += `
+            <div class="stat-item">
+                <span class="stat-name">❤️ Vie Maximum</span>
+                <span class="stat-value">Niveau ${player.upgrades.maxHealth}/10</span>
+            </div>
+        `;
+    }
+
+    if (player.upgrades && player.upgrades.damage > 0) {
+        hasShopUpgrades = true;
+        shopHTML += `
+            <div class="stat-item">
+                <span class="stat-name">⚔️ Dégâts</span>
+                <span class="stat-value">Niveau ${player.upgrades.damage}/5</span>
+            </div>
+        `;
+    }
+
+    if (player.upgrades && player.upgrades.speed > 0) {
+        hasShopUpgrades = true;
+        shopHTML += `
+            <div class="stat-item">
+                <span class="stat-name">👟 Vitesse</span>
+                <span class="stat-value">Niveau ${player.upgrades.speed}/5</span>
+            </div>
+        `;
+    }
+
+    if (player.upgrades && player.upgrades.fireRate > 0) {
+        hasShopUpgrades = true;
+        shopHTML += `
+            <div class="stat-item">
+                <span class="stat-name">🔫 Cadence de Tir</span>
+                <span class="stat-value">Niveau ${player.upgrades.fireRate}/5</span>
+            </div>
+        `;
+    }
+
+    shopUpgradesContainer.innerHTML = hasShopUpgrades ? shopHTML : '<div class="no-upgrades">Aucun upgrade permanent acheté</div>';
+}
 
 // Boucle de jeu
 function gameLoop() {

@@ -56,11 +56,41 @@ Ce jeu suit les principes du genre rogue-like :
   - Drop: 100 gold, 100 XP
   - Ouvre la porte vers la salle suivante
 
-### Système de Progression
-- **Niveau** : Montez de niveau en gagnant de l'XP
-- **Level-up** : +10 PV max et heal complet
-- **Gold** : Ramassez l'or des zombies tués
+### Système de Progression & Level-Up
+
+#### Montée de Niveau
 - **XP** : Gain d'expérience progressif (formule: 100 × 1.5^(level-1))
+- **Level-up** : À chaque niveau, **le jeu se met en pause** et vous choisissez **1 amélioration parmi 3**
+- **Gold** : Ramassez l'or des zombies tués pour le shop
+
+#### Améliorations de Level-Up
+
+**Améliorations Communes** (60% de chance) :
+- **❤️ Coeur Robuste** : +30 PV max
+- **⚔️ Force Brute** : +15% dégâts
+- **👟 Vélocité** : +20% vitesse
+- **🔫 Gâchette Rapide** : -15% cooldown armes
+- **💰 Aimant à Or** : +50% rayon de collecte
+- **✨ Soin Complet** : Restaure toute votre vie
+
+**Améliorations Rares** (30% de chance) :
+- **💚 Régénération** : +1 PV/sec (cumulable)
+- **🎯 Balles Perforantes** : Les balles traversent +1 ennemi
+- **🩸 Vol de Vie** : +5% de vol de vie sur dégâts
+- **💥 Coup Critique** : +10% chance de critique (x2 dégâts, balles rouges)
+- **🌀 Esquive** : +8% chance d'esquiver les attaques
+- **🛡️ Épines** : Renvoie 20% des dégâts reçus
+
+**Améliorations Légendaires** (10% de chance) :
+- **💣 Munitions Explosives** : Les balles explosent (rayon 30px, 50% dégâts AOE)
+- **🎆 Tir Multiple** : +1 balle supplémentaire par tir
+
+#### Panneau de Statistiques
+Appuyez sur **TAB** pour voir :
+- Vos stats de base (vie, multiplicateurs, niveau, or)
+- Toutes vos améliorations de level-up actives
+- Vos upgrades permanents du shop
+- Vos capacités spéciales (régénération, critique, esquive, etc.)
 
 ### Armes
 - **Pistolet** : Arme de base, tir rapide et précis
@@ -114,6 +144,7 @@ Ouvrez plusieurs onglets sur `http://localhost:3000` pour tester le multijoueur 
 - **WASD/ZQSD** ou **Flèches** : Déplacement
 - **Souris** : Viser
 - **Clic gauche** : Tirer
+- **TAB** : Ouvrir/Fermer le panneau de statistiques
 - **Collecte automatique** : Marchez sur le loot et power-ups
 
 ## Comment Jouer (Guide Rogue-like)
@@ -219,6 +250,9 @@ Le shop s'ouvre automatiquement après avoir tué le boss de chaque salle. Vous 
 - [x] Shop entre les salles pour dépenser l'or ✅
 - [x] Upgrades permanents achetables ✅
 - [x] Zombies spéciaux (explosif, soigneur, ralentisseur) ✅
+- [x] Système de level-up avec choix d'améliorations ✅
+- [x] Panneau de statistiques (TAB) ✅
+- [x] 14 améliorations uniques avec différentes raretés ✅
 - [ ] Sons et effets audio (tirs, impacts, musique)
 - [ ] Plus de variété (zombies toxiques, gelés, vampires, etc.)
 - [ ] Armes permanentes à débloquer
@@ -228,6 +262,7 @@ Le shop s'ouvre automatiquement après avoir tué le boss de chaque salle. Vous 
 - [ ] Sauvegarde des upgrades en base de données
 - [ ] Mode Boss Rush
 - [ ] Salles bonus avec défis spéciaux
+- [ ] Synergies entre améliorations
 
 ## Technologies
 
