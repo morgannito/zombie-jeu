@@ -596,14 +596,16 @@ function getXPForLevel(level) {
   return Math.floor(100 * Math.pow(1.5, level - 1));
 }
 
-// Spawn des zombies (Rogue-like avec types)
+// Spawn des zombies (MODE INFINI avec vagues)
 function spawnZombie() {
   if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) {
     return;
   }
 
-  // Limiter le spawn selon la salle
-  if (gameState.zombiesSpawnedThisWave >= CONFIG.ZOMBIES_PER_ROOM) {
+  // Limiter le spawn selon la vague actuelle
+  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 3; // +3 zombies par vague
+
+  if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
     // Spawner le boss si pas encore fait
     if (!gameState.bossSpawned && Object.keys(gameState.zombies).length === 0) {
       spawnBoss();
@@ -649,9 +651,16 @@ function spawnZombie() {
   gameState.zombiesSpawnedThisWave++;
 }
 
-// Spawner un boss zombie
+// Spawner un boss zombie (MODE INFINI - difficulté croissante)
 function spawnBoss() {
   const type = ZOMBIE_TYPES.boss;
+
+  // Le boss devient plus fort à chaque vague
+  const waveMultiplier = 1 + (gameState.wave - 1) * 0.15; // +15% par vague
+  const bossHealth = Math.floor(type.health * waveMultiplier);
+  const bossDamage = Math.floor(type.damage * waveMultiplier);
+  const bossGold = Math.floor(type.goldDrop * waveMultiplier);
+  const bossXP = Math.floor(type.xpDrop * waveMultiplier);
 
   // Centre de la salle
   const x = CONFIG.ROOM_WIDTH / 2;
@@ -664,22 +673,23 @@ function spawnBoss() {
     type: 'boss',
     x: x,
     y: y,
-    health: type.health,
-    maxHealth: type.health,
+    health: bossHealth,
+    maxHealth: bossHealth,
     speed: type.speed,
-    damage: type.damage,
+    damage: bossDamage,
     color: type.color,
     size: type.size,
-    goldDrop: type.goldDrop,
-    xpDrop: type.xpDrop,
+    goldDrop: bossGold,
+    xpDrop: bossXP,
     isBoss: true
   };
 
   gameState.bossSpawned = true;
 
   io.emit('bossSpawned', {
-    bossName: type.name,
-    bossHealth: type.health
+    bossName: `${type.name} (Vague ${gameState.wave})`,
+    bossHealth: bossHealth,
+    wave: gameState.wave
   });
 }
 
@@ -968,18 +978,28 @@ function gameLoop() {
 
           gameState.zombiesKilledThisWave++;
 
-          // Si c'était le boss, activer la porte
+          // Si c'était le boss, lancer une nouvelle vague (MODE INFINI)
           if (zombie.isBoss) {
-            const room = gameState.rooms[gameState.currentRoom];
-            if (room && room.doors.length > 0) {
-              room.doors[0].active = true;
-              io.emit('doorOpened');
-            }
-          }
+            // Nouvelle vague !
+            gameState.wave++;
+            gameState.bossSpawned = false;
+            gameState.zombiesKilledThisWave = 0;
+            gameState.zombiesSpawnedThisWave = 0;
 
-          // Si tous les zombies sont morts et le boss aussi, permettre de passer à la salle suivante
-          if (Object.keys(gameState.zombies).length === 0 && gameState.bossSpawned) {
-            // La porte est déjà ouverte
+            // Notifier tous les joueurs de la nouvelle vague
+            io.emit('newWave', {
+              wave: gameState.wave,
+              zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 3
+            });
+
+            // Bonus de santé pour les joueurs survivants
+            for (let playerId in gameState.players) {
+              const player = gameState.players[playerId];
+              if (player.alive) {
+                player.health = Math.min(player.health + 50, player.maxHealth);
+                player.gold += 50; // Bonus d'or pour avoir survécu à la vague
+              }
+            }
           }
         }
         break;
@@ -1088,9 +1108,8 @@ setInterval(() => {
     particles: gameState.particles,
     loot: gameState.loot,
     walls: gameState.walls,
-    currentRoom: gameState.currentRoom,
-    totalRooms: CONFIG.ROOMS_PER_RUN,
-    doors: gameState.rooms[gameState.currentRoom]?.doors || []
+    wave: gameState.wave, // MODE INFINI - afficher la vague actuelle
+    zombiesRemaining: Object.keys(gameState.zombies).length
   });
 }, 1000 / 60);
 
@@ -1169,27 +1188,7 @@ io.on('connection', (socket) => {
 
     player.angle = data.angle;
 
-    // Vérifier si le joueur passe par la porte (pour changer de salle)
-    const room = gameState.rooms[gameState.currentRoom];
-    if (room && room.doors.length > 0 && room.doors[0].active) {
-      const door = room.doors[0];
-      // Si le joueur est proche de la porte (en haut)
-      if (player.y < 30 && player.x > door.x && player.x < door.x + door.width) {
-        // Passer à la salle suivante
-        if (gameState.currentRoom < CONFIG.ROOMS_PER_RUN - 1) {
-          loadRoom(gameState.currentRoom + 1);
-          // Réinitialiser la position du joueur en bas de la nouvelle salle
-          player.x = CONFIG.ROOM_WIDTH / 2;
-          player.y = CONFIG.ROOM_HEIGHT - 100;
-        } else {
-          // Fin du run!
-          io.emit('runCompleted', {
-            gold: player.gold,
-            level: player.level
-          });
-        }
-      }
-    }
+    // MODE INFINI - Pas de portes ni de changements de salle
   });
 
   // Tir du joueur

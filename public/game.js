@@ -122,18 +122,24 @@ socket.on('bossSpawned', (data) => {
     showBossAnnouncement(data.bossName);
 });
 
+// Nouvelle vague (MODE INFINI)
+socket.on('newWave', (data) => {
+    showNewWaveAnnouncement(data.wave, data.zombiesCount);
+    // Afficher le shop après avoir tué le boss
+    setTimeout(() => {
+        showShop();
+    }, 2000);
+});
+
 // Level up - afficher les choix d'upgrades
 socket.on('levelUp', (data) => {
     showLevelUpScreen(data.newLevel, data.upgradeChoices);
 });
 
+// OBSOLETE en MODE INFINI (gardé pour compatibilité)
 // Porte ouverte - Afficher le shop
 socket.on('doorOpened', () => {
     console.log('La porte est ouverte!');
-    // Afficher le shop après avoir tué le boss
-    setTimeout(() => {
-        showShop();
-    }, 1000);
 });
 
 // Changement de salle
@@ -202,7 +208,7 @@ socket.on('upgradeSelected', (data) => {
     }
 });
 
-// Afficher changement de salle
+// Afficher changement de salle (OBSOLETE - gardé pour compatibilité)
 function showRoomAnnouncement(roomNum, totalRooms) {
     const announcement = document.getElementById('wave-announcement');
     announcement.querySelector('h1').textContent = `Salle ${roomNum}/${totalRooms}`;
@@ -214,7 +220,21 @@ function showRoomAnnouncement(roomNum, totalRooms) {
     }, 2000);
 }
 
-// Run complété
+// Afficher nouvelle vague (MODE INFINI)
+function showNewWaveAnnouncement(wave, zombiesCount) {
+    const announcement = document.getElementById('wave-announcement');
+    announcement.querySelector('h1').innerHTML = `VAGUE ${wave}`;
+    announcement.querySelector('p').textContent = `${zombiesCount} zombies à éliminer !`;
+    announcement.style.background = 'rgba(0, 255, 100, 0.9)';
+    announcement.style.display = 'block';
+
+    setTimeout(() => {
+        announcement.style.display = 'none';
+        announcement.style.background = 'rgba(255, 170, 0, 0.9)';
+    }, 3000);
+}
+
+// Run complété (OBSOLETE en mode infini)
 function showRunCompleted(gold, level) {
     alert(`Run complété! Or gagné: ${gold}, Niveau atteint: ${level}`);
 }
@@ -231,7 +251,7 @@ function updateUI() {
 
         // Score et stats
         document.getElementById('score-value').textContent = player.score;
-        document.getElementById('wave-value').textContent = `${gameState.currentRoom + 1}/${gameState.totalRooms}`;
+        document.getElementById('wave-value').textContent = `${gameState.wave || 1}`; // MODE INFINI - afficher la vague
 
         // Niveau et XP
         if (player.level) {
@@ -242,7 +262,7 @@ function updateUI() {
         if (!player.alive) {
             document.getElementById('game-over').style.display = 'block';
             document.getElementById('final-score').textContent = player.score;
-            document.getElementById('final-wave').textContent = `${gameState.currentRoom + 1}/${gameState.totalRooms}`;
+            document.getElementById('final-wave').textContent = `${gameState.wave || 1}`; // MODE INFINI
         }
     }
 
