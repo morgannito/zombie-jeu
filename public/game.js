@@ -32,6 +32,8 @@ let gameState = {
     totalRooms: 5,
     doors: []
 };
+let previousGameState = null; // Pour l'interpolation
+let interpolationAlpha = 0;   // Facteur d'interpolation
 let config = {};
 let weapons = {};
 let powerupTypes = {};
@@ -93,7 +95,25 @@ socket.on('init', (data) => {
 
 // Mise à jour de l'état du jeu
 socket.on('gameState', (state) => {
-    gameState = state;
+    // Sauvegarder l'état précédent pour l'interpolation
+    if (gameState && gameState.players && gameState.players[playerId]) {
+        // Préserver la position du joueur local (client-side prediction)
+        const localPlayerX = gameState.players[playerId].x;
+        const localPlayerY = gameState.players[playerId].y;
+        const localPlayerAngle = gameState.players[playerId].angle;
+
+        gameState = state;
+
+        // Restaurer la position prédite du joueur local
+        if (gameState.players[playerId]) {
+            gameState.players[playerId].x = localPlayerX;
+            gameState.players[playerId].y = localPlayerY;
+            gameState.players[playerId].angle = localPlayerAngle;
+        }
+    } else {
+        gameState = state;
+    }
+
     updateUI();
 });
 
@@ -278,6 +298,12 @@ function updatePlayerPosition() {
         mouse.y - canvas.height / 2,
         mouse.x - canvas.width / 2
     );
+
+    // CLIENT-SIDE PREDICTION : Mettre à jour immédiatement côté client pour la fluidité
+    // Le serveur validera et corrigera si nécessaire
+    player.x = newX;
+    player.y = newY;
+    player.angle = angle;
 
     // Envoyer au serveur
     socket.emit('playerMove', {
