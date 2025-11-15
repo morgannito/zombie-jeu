@@ -156,6 +156,44 @@ const ZOMBIE_TYPES = {
     goldDrop: 20,
     xpDrop: 30
   },
+  explosive: {
+    name: 'Zombie Explosif',
+    health: 60,
+    speed: 2.5,
+    damage: 10,
+    color: '#ff00ff',
+    size: 22,
+    goldDrop: 15,
+    xpDrop: 20,
+    explosionRadius: 100,
+    explosionDamage: 30
+  },
+  healer: {
+    name: 'Zombie Soigneur',
+    health: 100,
+    speed: 1.5,
+    damage: 5,
+    color: '#00ffff',
+    size: 28,
+    goldDrop: 25,
+    xpDrop: 25,
+    healAmount: 10,
+    healRadius: 150,
+    healCooldown: 3000
+  },
+  slower: {
+    name: 'Zombie Ralentisseur',
+    health: 90,
+    speed: 1.8,
+    damage: 6,
+    color: '#8800ff',
+    size: 26,
+    goldDrop: 18,
+    xpDrop: 22,
+    slowRadius: 120,
+    slowAmount: 0.5,
+    slowDuration: 2000
+  },
   boss: {
     name: 'Boss Zombie',
     health: 500,
@@ -395,8 +433,8 @@ function spawnZombie() {
 
   if (attempts >= 50) return; // Pas de place disponible
 
-  // Choisir un type de zombie aléatoirement
-  const types = ['normal', 'normal', 'normal', 'fast', 'tank']; // Plus de normaux
+  // Choisir un type de zombie aléatoirement avec pondération
+  const types = ['normal', 'normal', 'normal', 'fast', 'fast', 'tank', 'explosive', 'healer', 'slower'];
   const typeKey = types[Math.floor(Math.random() * types.length)];
   const type = ZOMBIE_TYPES[typeKey];
 
@@ -414,7 +452,9 @@ function spawnZombie() {
     color: type.color,
     size: type.size,
     goldDrop: type.goldDrop,
-    xpDrop: type.xpDrop
+    xpDrop: type.xpDrop,
+    // Attributs spéciaux
+    lastHeal: typeKey === 'healer' ? Date.now() : null
   };
 
   gameState.zombiesSpawnedThisWave++;
@@ -536,6 +576,45 @@ function gameLoop() {
   for (let zombieId in gameState.zombies) {
     const zombie = gameState.zombies[zombieId];
 
+    // Capacité spéciale : Zombie Soigneur
+    if (zombie.type === 'healer') {
+      const healerType = ZOMBIE_TYPES.healer;
+      if (!zombie.lastHeal || now - zombie.lastHeal >= healerType.healCooldown) {
+        zombie.lastHeal = now;
+
+        // Soigner les zombies autour
+        for (let otherId in gameState.zombies) {
+          if (otherId !== zombieId) {
+            const other = gameState.zombies[otherId];
+            const dist = distance(zombie.x, zombie.y, other.x, other.y);
+            if (dist < healerType.healRadius && other.health < other.maxHealth) {
+              other.health = Math.min(other.health + healerType.healAmount, other.maxHealth);
+              // Créer des particules de soin
+              createParticles(other.x, other.y, '#00ffff', 5);
+            }
+          }
+        }
+      }
+    }
+
+    // Capacité spéciale : Zombie Ralentisseur
+    if (zombie.type === 'slower') {
+      const slowerType = ZOMBIE_TYPES.slower;
+
+      // Ralentir les joueurs dans le rayon
+      for (let playerId in gameState.players) {
+        const player = gameState.players[playerId];
+        if (player.alive) {
+          const dist = distance(zombie.x, zombie.y, player.x, player.y);
+          if (dist < slowerType.slowRadius) {
+            // Appliquer l'effet de ralentissement
+            player.slowedUntil = now + slowerType.slowDuration;
+            player.slowAmount = slowerType.slowAmount;
+          }
+        }
+      }
+    }
+
     // Trouver le joueur le plus proche
     let closestPlayer = null;
     let closestDistance = Infinity;
@@ -605,6 +684,28 @@ function gameLoop() {
         if (zombie.health <= 0) {
           // Créer plus de particules pour la mort
           createParticles(zombie.x, zombie.y, zombie.color, 15);
+
+          // Effet spécial : Zombie Explosif
+          if (zombie.type === 'explosive') {
+            const explosionType = ZOMBIE_TYPES.explosive;
+            // Créer une énorme explosion de particules
+            createParticles(zombie.x, zombie.y, '#ff00ff', 30);
+
+            // Infliger des dégâts à tous les joueurs dans le rayon
+            for (let playerId in gameState.players) {
+              const player = gameState.players[playerId];
+              if (player.alive) {
+                const dist = distance(zombie.x, zombie.y, player.x, player.y);
+                if (dist < explosionType.explosionRadius) {
+                  player.health -= explosionType.explosionDamage;
+                  if (player.health <= 0) {
+                    player.health = 0;
+                    player.alive = false;
+                  }
+                }
+              }
+            }
+          }
 
           // Créer du loot
           createLoot(zombie.x, zombie.y, zombie.goldDrop, zombie.xpDrop);

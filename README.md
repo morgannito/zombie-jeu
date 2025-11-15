@@ -20,19 +20,38 @@ Ce jeu suit les principes du genre rogue-like :
 - Mini-map en temps réel affichant la salle complète
 
 ### Types de Zombies
-- **Zombie Normal** (Vert)
+
+**Zombies Basiques :**
+- **Zombie Normal** (Vert 🟢)
   - Vie: 80 | Vitesse: 2 | Dégâts: 8
   - Drop: 5 gold, 10 XP
 
-- **Zombie Rapide** (Jaune)
+- **Zombie Rapide** (Jaune 🟡)
   - Vie: 50 | Vitesse: 4 | Dégâts: 12
   - Drop: 10 gold, 15 XP
 
-- **Zombie Tank** (Orange)
+- **Zombie Tank** (Orange 🟠)
   - Vie: 200 | Vitesse: 1 | Dégâts: 20
   - Drop: 20 gold, 30 XP
 
-- **Boss Zombie** (Rouge) - Fin de salle
+**Zombies Spéciaux :**
+- **Zombie Explosif** (Magenta 💣)
+  - Vie: 60 | Vitesse: 2.5 | Dégâts: 10
+  - Drop: 15 gold, 20 XP
+  - **DANGER** : Explose à la mort dans un rayon de 100px et inflige 30 dégâts !
+
+- **Zombie Soigneur** (Cyan +)
+  - Vie: 100 | Vitesse: 1.5 | Dégâts: 5
+  - Drop: 25 gold, 25 XP
+  - **Capacité** : Soigne les zombies proches de 10 PV toutes les 3 secondes (rayon: 150px)
+
+- **Zombie Ralentisseur** (Violet ⏱)
+  - Vie: 90 | Vitesse: 1.8 | Dégâts: 6
+  - Drop: 18 gold, 22 XP
+  - **Capacité** : Ralentit les joueurs de 50% dans un rayon de 120px
+
+**Boss :**
+- **Boss Zombie** (Rouge 💀) - Fin de salle
   - Vie: 500 | Vitesse: 1.5 | Dégâts: 25
   - Drop: 100 gold, 100 XP
   - Ouvre la porte vers la salle suivante
@@ -135,9 +154,22 @@ Ouvrez plusieurs onglets sur `http://localhost:3000` pour tester le multijoueur 
 
 - **10 zombies** spawns progressifs par salle
 - **1 boss zombie** après les 10 zombies
-- **Types variés** : Mélange de normaux, rapides et tanks
+- **Types variés** : Mélange de basiques et spéciaux
 - **Spawn limité** : Maximum 15 zombies simultanés
 - **Interval** : Nouveau zombie toutes les 3 secondes
+
+### Stratégies contre les Zombies Spéciaux
+
+**🎯 Priorités de ciblage :**
+1. **Zombie Soigneur** 🔴 HAUTE PRIORITÉ - Éliminez-le en premier pour éviter qu'il soigne les autres
+2. **Zombie Explosif** 🟠 ATTENTION - Gardez vos distances ! Reculez avant qu'il meure
+3. **Zombie Ralentisseur** 🟡 MOBILITÉ - Restez hors de portée de son aura violette
+
+**💡 Astuces :**
+- Les zombies explosifs peuvent être utilisés pour infliger des dégâts aux autres zombies
+- Utilisez les obstacles pour bloquer les zombies ralentisseurs
+- Focus les soigneurs avec le shotgun pour les éliminer rapidement
+- Achetez l'upgrade de vitesse au shop pour échapper aux ralentisseurs
 
 ## Progression Permanente & Shop
 
@@ -186,13 +218,16 @@ Le shop s'ouvre automatiquement après avoir tué le boss de chaque salle. Vous 
 
 - [x] Shop entre les salles pour dépenser l'or ✅
 - [x] Upgrades permanents achetables ✅
+- [x] Zombies spéciaux (explosif, soigneur, ralentisseur) ✅
 - [ ] Sons et effets audio (tirs, impacts, musique)
-- [ ] Plus de types de zombies (explosif, soigneur, ralentisseur, etc.)
+- [ ] Plus de variété (zombies toxiques, gelés, vampires, etc.)
 - [ ] Armes permanentes à débloquer
 - [ ] Système de classes de personnages
 - [ ] Leaderboard multijoueur
 - [ ] Achievements et unlocks
 - [ ] Sauvegarde des upgrades en base de données
+- [ ] Mode Boss Rush
+- [ ] Salles bonus avec défis spéciaux
 
 ## Technologies
 

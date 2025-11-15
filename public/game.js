@@ -230,6 +230,11 @@ function updatePlayerPosition() {
         speed *= 1.5;
     }
 
+    // Ralentissement par zombie ralentisseur
+    if (player.slowedUntil && Date.now() < player.slowedUntil) {
+        speed *= (player.slowAmount || 1);
+    }
+
     // Calculer la nouvelle position
     const newX = player.x + dx * speed;
     const newY = player.y + dy * speed;
@@ -427,6 +432,52 @@ function render() {
             ctx.lineWidth = 3;
             ctx.strokeText('BOSS', zombie.x, zombie.y - zombie.size - 25);
             ctx.fillText('BOSS', zombie.x, zombie.y - zombie.size - 25);
+        }
+
+        // Indicateurs pour zombies spéciaux
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        if (zombie.type === 'explosive') {
+            // Symbole d'explosion
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.strokeText('💣', zombie.x, zombie.y);
+            ctx.fillText('💣', zombie.x, zombie.y);
+        } else if (zombie.type === 'healer') {
+            // Symbole de soin avec aura
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(zombie.x, zombie.y, zombie.size + 10 + Math.sin(Date.now() / 200) * 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.strokeText('+', zombie.x, zombie.y);
+            ctx.fillText('+', zombie.x, zombie.y);
+        } else if (zombie.type === 'slower') {
+            // Symbole de ralentissement avec aura
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            ctx.strokeStyle = '#8800ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(zombie.x, zombie.y, zombie.size + 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.strokeText('⏱', zombie.x, zombie.y);
+            ctx.fillText('⏱', zombie.x, zombie.y);
         }
     }
 
