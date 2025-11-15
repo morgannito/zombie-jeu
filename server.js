@@ -873,7 +873,13 @@ function gameLoop() {
       // Vérifier collision avec joueurs
       for (let playerId in gameState.players) {
         const player = gameState.players[playerId];
-        if (player.alive && distance(zombie.x, zombie.y, player.x, player.y) < zombie.size) {
+
+        // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
+        if (!player.alive || !player.hasNickname || player.spawnProtection) {
+          continue;
+        }
+
+        if (distance(zombie.x, zombie.y, player.x, player.y) < zombie.size) {
           // Esquive
           if (Math.random() < (player.dodgeChance || 0)) {
             continue; // Esquive réussie
@@ -976,7 +982,8 @@ function gameLoop() {
             // Infliger des dégâts à tous les joueurs dans le rayon
             for (let playerId in gameState.players) {
               const player = gameState.players[playerId];
-              if (player.alive) {
+              // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
+              if (player.alive && player.hasNickname && !player.spawnProtection) {
                 const dist = distance(zombie.x, zombie.y, player.x, player.y);
                 if (dist < explosionType.explosionRadius) {
                   player.health -= explosionType.explosionDamage;
@@ -1051,7 +1058,8 @@ function gameLoop() {
     // Vérifier collision avec joueurs
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
-      if (player.alive && distance(powerup.x, powerup.y, player.x, player.y) < CONFIG.PLAYER_SIZE + CONFIG.POWERUP_SIZE) {
+      // Seuls les joueurs avec pseudo peuvent collecter des power-ups
+      if (player.alive && player.hasNickname && distance(powerup.x, powerup.y, player.x, player.y) < CONFIG.PLAYER_SIZE + CONFIG.POWERUP_SIZE) {
         // Appliquer l'effet du power-up
         POWERUP_TYPES[powerup.type].effect(player);
         delete gameState.powerups[powerupId];
@@ -1077,7 +1085,8 @@ function gameLoop() {
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
       const collectRadius = CONFIG.PLAYER_SIZE + CONFIG.LOOT_SIZE + (player.goldMagnetRadius || 0);
-      if (player.alive && distance(loot.x, loot.y, player.x, player.y) < collectRadius) {
+      // Seuls les joueurs avec pseudo peuvent collecter du loot
+      if (player.alive && player.hasNickname && distance(loot.x, loot.y, player.x, player.y) < collectRadius) {
         // Donner l'or et l'XP
         player.gold += loot.gold;
         player.xp += loot.xp;
