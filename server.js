@@ -124,85 +124,85 @@ const POWERUP_TYPES = {
   }
 };
 
-// Types de zombies (Rogue-like)
+// Types de zombies (Rogue-like avec XP améliorée)
 const ZOMBIE_TYPES = {
   normal: {
     name: 'Zombie Normal',
-    health: 65, // Réduit (80 -> 65)
+    health: 65,
     speed: 2,
     damage: 8,
     color: '#00ff00',
     size: 25,
-    goldDrop: 8, // Plus d'or (5 -> 8)
-    xpDrop: 12 // Plus d'XP (10 -> 12)
+    goldDrop: 8,
+    xpDrop: 20 // +67% XP (12 -> 20)
   },
   fast: {
     name: 'Zombie Rapide',
-    health: 45, // Réduit (50 -> 45)
+    health: 45,
     speed: 4,
     damage: 12,
     color: '#ffff00',
     size: 20,
-    goldDrop: 15, // Plus d'or (10 -> 15)
-    xpDrop: 18 // Plus d'XP (15 -> 18)
+    goldDrop: 15,
+    xpDrop: 30 // +67% XP (18 -> 30)
   },
   tank: {
     name: 'Zombie Tank',
-    health: 170, // Réduit (200 -> 170)
+    health: 170,
     speed: 1,
     damage: 20,
     color: '#ff6600',
     size: 35,
-    goldDrop: 30, // Plus d'or (20 -> 30)
-    xpDrop: 35 // Plus d'XP (30 -> 35)
+    goldDrop: 30,
+    xpDrop: 60 // +71% XP (35 -> 60)
   },
   explosive: {
     name: 'Zombie Explosif',
-    health: 50, // Réduit (60 -> 50)
+    health: 50,
     speed: 2.5,
     damage: 10,
     color: '#ff00ff',
     size: 22,
-    goldDrop: 20, // Plus d'or (15 -> 20)
-    xpDrop: 25, // Plus d'XP (20 -> 25)
+    goldDrop: 20,
+    xpDrop: 40, // +60% XP (25 -> 40)
     explosionRadius: 100,
     explosionDamage: 30
   },
   healer: {
     name: 'Zombie Soigneur',
-    health: 85, // Réduit (100 -> 85)
+    health: 85,
     speed: 1.5,
     damage: 5,
     color: '#00ffff',
     size: 28,
-    goldDrop: 35, // Plus d'or (25 -> 35)
-    xpDrop: 30, // Plus d'XP (25 -> 30)
+    goldDrop: 35,
+    xpDrop: 50, // +67% XP (30 -> 50)
     healAmount: 10,
     healRadius: 150,
     healCooldown: 3000
   },
   slower: {
     name: 'Zombie Ralentisseur',
-    health: 75, // Réduit (90 -> 75)
+    health: 75,
     speed: 1.8,
     damage: 6,
     color: '#8800ff',
     size: 26,
-    goldDrop: 25, // Plus d'or (18 -> 25)
-    xpDrop: 28, // Plus d'XP (22 -> 28)
+    goldDrop: 25,
+    xpDrop: 45, // +61% XP (28 -> 45)
     slowRadius: 120,
     slowAmount: 0.5,
     slowDuration: 2000
   },
   boss: {
     name: 'Boss Zombie',
-    health: 400, // Réduit (500 -> 400)
+    health: 400,
     speed: 1.5,
     damage: 25,
     color: '#ff0000',
     size: 50,
-    goldDrop: 150, // Plus d'or (100 -> 150)
-    xpDrop: 120 // Plus d'XP (100 -> 120)
+    goldDrop: 150,
+    xpDrop: 200 // +67% XP (120 -> 200)
   }
 };
 
@@ -591,9 +591,18 @@ function checkWallCollision(x, y, size) {
   return false;
 }
 
-// Calculer l'XP nécessaire pour le niveau suivant
+// Calculer l'XP nécessaire pour le niveau suivant (Courbe améliorée plus progressive)
 function getXPForLevel(level) {
-  return Math.floor(100 * Math.pow(1.5, level - 1));
+  // Courbe plus douce : les premiers niveaux sont rapides, puis ralentit progressivement
+  if (level <= 5) {
+    return 50 + (level - 1) * 30; // Niveaux 1-5 : 50, 80, 110, 140, 170
+  } else if (level <= 10) {
+    return 200 + (level - 5) * 50; // Niveaux 6-10 : 200, 250, 300, 350, 400
+  } else if (level <= 20) {
+    return 400 + (level - 10) * 75; // Niveaux 11-20 : 475, 550, 625...
+  } else {
+    return Math.floor(1000 + (level - 20) * 100); // Niveaux 20+ : 1100, 1200, 1300...
+  }
 }
 
 // Spawn des zombies (MODE INFINI avec vagues)
@@ -1073,12 +1082,64 @@ function gameLoop() {
           player.xp -= getXPForLevel(player.level);
           player.level++;
 
+          // PALIERS DE NIVEAU - Bonus automatiques tous les 5 niveaux
+          let milestoneBonus = null;
+          if (player.level % 5 === 0) {
+            // Bonus spéciaux par palier
+            if (player.level === 5) {
+              player.maxHealth += 50;
+              player.health = Math.min(player.health + 50, player.maxHealth);
+              milestoneBonus = {
+                title: '🎖️ PALIER 5 !',
+                description: '+50 PV max et régénération complète',
+                icon: '❤️'
+              };
+            } else if (player.level === 10) {
+              player.damageMultiplier = (player.damageMultiplier || 1) * 1.25;
+              player.speedMultiplier = (player.speedMultiplier || 1) * 1.20;
+              milestoneBonus = {
+                title: '🎖️ PALIER 10 !',
+                description: '+25% dégâts et +20% vitesse permanents',
+                icon: '⚔️'
+              };
+            } else if (player.level === 15) {
+              player.fireRateMultiplier = (player.fireRateMultiplier || 1) * 0.75;
+              player.criticalChance = (player.criticalChance || 0) + 0.15;
+              milestoneBonus = {
+                title: '🎖️ PALIER 15 !',
+                description: '-25% cooldown et +15% coup critique',
+                icon: '🔫'
+              };
+            } else if (player.level === 20) {
+              player.maxHealth += 100;
+              player.health = player.maxHealth; // Heal complet
+              player.lifeSteal = (player.lifeSteal || 0) + 0.10;
+              milestoneBonus = {
+                title: '🎖️ PALIER 20 !',
+                description: '+100 PV max, heal complet et +10% vol de vie',
+                icon: '💪'
+              };
+            } else {
+              // Paliers 25, 30, 35, etc. - Bonus génériques
+              const tier = Math.floor(player.level / 5);
+              player.maxHealth += 30;
+              player.health = Math.min(player.health + 30, player.maxHealth);
+              player.damageMultiplier = (player.damageMultiplier || 1) * 1.10;
+              milestoneBonus = {
+                title: `🎖️ PALIER ${player.level} !`,
+                description: '+30 PV max et +10% dégâts',
+                icon: '🌟'
+              };
+            }
+          }
+
           // Générer 3 choix d'upgrades
           const upgradeChoices = generateUpgradeChoices();
 
           io.to(playerId).emit('levelUp', {
             newLevel: player.level,
-            upgradeChoices: upgradeChoices
+            upgradeChoices: upgradeChoices,
+            milestoneBonus: milestoneBonus // Envoyer le bonus de palier s'il existe
           });
         }
 

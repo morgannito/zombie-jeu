@@ -133,7 +133,16 @@ socket.on('newWave', (data) => {
 
 // Level up - afficher les choix d'upgrades
 socket.on('levelUp', (data) => {
-    showLevelUpScreen(data.newLevel, data.upgradeChoices);
+    // Si c'est un palier de niveau, afficher d'abord le bonus de palier
+    if (data.milestoneBonus) {
+        showMilestoneBonus(data.milestoneBonus, data.newLevel);
+        // Puis afficher l'écran de level-up après 2.5 secondes
+        setTimeout(() => {
+            showLevelUpScreen(data.newLevel, data.upgradeChoices);
+        }, 2500);
+    } else {
+        showLevelUpScreen(data.newLevel, data.upgradeChoices);
+    }
 });
 
 // OBSOLETE en MODE INFINI (gardé pour compatibilité)
@@ -170,6 +179,16 @@ function showBossAnnouncement(bossName) {
 function showLevelUpScreen(newLevel, upgradeChoices) {
     const levelUpScreen = document.getElementById('level-up-screen');
     const upgradeChoicesContainer = document.getElementById('upgrade-choices');
+
+    // Mettre à jour le titre avec le nouveau niveau
+    const levelUpTitle = levelUpScreen.querySelector('.level-up-title');
+    levelUpTitle.textContent = `⬆️ NIVEAU ${newLevel} ! ⬆️`;
+
+    // Animer le titre
+    levelUpTitle.style.animation = 'none';
+    setTimeout(() => {
+        levelUpTitle.style.animation = 'pulse 1s ease-in-out infinite';
+    }, 10);
 
     // Vider les choix précédents
     upgradeChoicesContainer.innerHTML = '';
@@ -234,9 +253,40 @@ function showNewWaveAnnouncement(wave, zombiesCount) {
     }, 3000);
 }
 
+// Afficher bonus de palier de niveau
+function showMilestoneBonus(bonus, level) {
+    const announcement = document.getElementById('wave-announcement');
+    announcement.querySelector('h1').innerHTML = `${bonus.icon} ${bonus.title}`;
+    announcement.querySelector('p').textContent = bonus.description;
+    announcement.style.background = 'linear-gradient(135deg, rgba(255, 215, 0, 0.95) 0%, rgba(255, 140, 0, 0.95) 100%)';
+    announcement.style.border = '4px solid #FFD700';
+    announcement.style.boxShadow = '0 0 30px rgba(255, 215, 0, 0.8)';
+    announcement.style.display = 'block';
+
+    setTimeout(() => {
+        announcement.style.display = 'none';
+        announcement.style.background = 'rgba(255, 170, 0, 0.9)';
+        announcement.style.border = 'none';
+        announcement.style.boxShadow = 'none';
+    }, 2500);
+}
+
 // Run complété (OBSOLETE en mode infini)
 function showRunCompleted(gold, level) {
     alert(`Run complété! Or gagné: ${gold}, Niveau atteint: ${level}`);
+}
+
+// Calculer XP pour le prochain niveau (même logique que le serveur)
+function getXPForLevel(level) {
+    if (level <= 5) {
+        return 50 + (level - 1) * 30;
+    } else if (level <= 10) {
+        return 200 + (level - 5) * 50;
+    } else if (level <= 20) {
+        return 400 + (level - 10) * 75;
+    } else {
+        return Math.floor(1000 + (level - 20) * 100);
+    }
 }
 
 // Mise à jour de l'interface
@@ -249,14 +299,19 @@ function updateUI() {
         document.getElementById('health-fill').style.width = healthPercent + '%';
         document.getElementById('health-text').textContent = Math.max(0, Math.round(player.health));
 
+        // Barre XP et niveau
+        if (player.level && player.xp !== undefined) {
+            const xpNeeded = getXPForLevel(player.level);
+            const xpPercent = (player.xp / xpNeeded) * 100;
+            document.getElementById('xp-fill').style.width = xpPercent + '%';
+            document.getElementById('level-text').textContent = player.level;
+            document.getElementById('xp-text').textContent = `${Math.floor(player.xp)}/${xpNeeded}`;
+        }
+
         // Score et stats
         document.getElementById('score-value').textContent = player.score;
         document.getElementById('wave-value').textContent = `${gameState.wave || 1}`; // MODE INFINI - afficher la vague
-
-        // Niveau et XP
-        if (player.level) {
-            document.getElementById('weapon-value').textContent = `Lvl ${player.level} | ${player.gold} gold`;
-        }
+        document.getElementById('gold-value').textContent = player.gold || 0;
 
         // Game Over
         if (!player.alive) {
