@@ -5,6 +5,10 @@ const socket = io();
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Minimap
+const minimap = document.getElementById('minimap');
+const minimapCtx = minimap.getContext('2d');
+
 // Redimensionner le canvas
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -19,12 +23,18 @@ let playerId = null;
 let gameState = {
     players: {},
     zombies: {},
-    bullets: {}
+    bullets: {},
+    powerups: {},
+    particles: {},
+    wave: 1
 };
 let config = {};
+let weapons = {};
+let powerupTypes = {};
 let keys = {};
 let mouse = { x: 0, y: 0 };
 let camera = { x: 0, y: 0 };
+let currentWave = 1;
 
 // Input clavier
 window.addEventListener('keydown', (e) => {
@@ -62,6 +72,8 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
 socket.on('init', (data) => {
     playerId = data.playerId;
     config = data.config;
+    weapons = data.weapons;
+    powerupTypes = data.powerupTypes;
     console.log('Connecté au jeu! ID:', playerId);
 });
 
@@ -70,6 +82,23 @@ socket.on('gameState', (state) => {
     gameState = state;
     updateUI();
 });
+
+// Nouvelle vague
+socket.on('newWave', (wave) => {
+    currentWave = wave;
+    showWaveAnnouncement(wave);
+});
+
+// Afficher l'annonce de vague
+function showWaveAnnouncement(wave) {
+    const announcement = document.getElementById('wave-announcement');
+    document.getElementById('wave-number').textContent = wave;
+    announcement.style.display = 'block';
+
+    setTimeout(() => {
+        announcement.style.display = 'none';
+    }, 2000);
+}
 
 // Mise à jour de l'interface
 function updateUI() {
@@ -84,12 +113,20 @@ function updateUI() {
         // Score
         document.getElementById('score-value').textContent = player.score;
 
+        // Arme
+        const weaponName = weapons[player.weapon]?.name || 'Pistolet';
+        document.getElementById('weapon-value').textContent = weaponName;
+
         // Game Over
         if (!player.alive) {
             document.getElementById('game-over').style.display = 'block';
             document.getElementById('final-score').textContent = player.score;
+            document.getElementById('final-wave').textContent = gameState.wave;
         }
     }
+
+    // Vague
+    document.getElementById('wave-value').textContent = gameState.wave;
 
     // Nombre de joueurs
     document.getElementById('players-count').textContent = Object.keys(gameState.players).length;
@@ -118,9 +155,15 @@ function updatePlayerPosition() {
         dy *= 0.707;
     }
 
+    // Appliquer le boost de vitesse
+    let speed = config.PLAYER_SPEED;
+    if (player.speedBoost && Date.now() < player.speedBoost) {
+        speed *= 1.5;
+    }
+
     // Calculer la nouvelle position
-    const newX = player.x + dx * config.PLAYER_SPEED;
-    const newY = player.y + dy * config.PLAYER_SPEED;
+    const newX = player.x + dx * speed;
+    const newY = player.y + dy * speed;
 
     // Angle de visée
     const angle = Math.atan2(
@@ -160,13 +203,63 @@ function render() {
     ctx.lineWidth = 5;
     ctx.strokeRect(0, 0, config.WORLD_WIDTH, config.WORLD_HEIGHT);
 
+    // Dessiner les power-ups
+    for (let powerupId in gameState.powerups) {
+        const powerup = gameState.powerups[powerupId];
+        const type = powerupTypes[powerup.type];
+
+        if (!type) continue;
+
+        // Effet de pulsation
+        const pulse = Math.sin(Date.now() / 200) * 3 + config.POWERUP_SIZE;
+
+        // Cercle du power-up
+        ctx.fillStyle = type.color;
+        ctx.beginPath();
+        ctx.arc(powerup.x, powerup.y, pulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bordure
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Icône ou texte
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        let symbol = '?';
+        if (powerup.type === 'health') symbol = '+';
+        else if (powerup.type === 'speed') symbol = '»';
+        else if (powerup.type === 'shotgun') symbol = 'S';
+        else if (powerup.type === 'machinegun') symbol = 'M';
+
+        ctx.fillText(symbol, powerup.x, powerup.y);
+    }
+
+    // Dessiner les particules
+    for (let particleId in gameState.particles) {
+        const particle = gameState.particles[particleId];
+        ctx.fillStyle = particle.color;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
     // Dessiner les balles
     for (let bulletId in gameState.bullets) {
         const bullet = gameState.bullets[bulletId];
-        ctx.fillStyle = '#ffff00';
+        ctx.fillStyle = bullet.color || '#ffff00';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = bullet.color || '#ffff00';
         ctx.beginPath();
         ctx.arc(bullet.x, bullet.y, config.BULLET_SIZE, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
     }
 
     // Dessiner les zombies
@@ -179,6 +272,11 @@ function render() {
         ctx.arc(zombie.x, zombie.y, config.ZOMBIE_SIZE, 0, Math.PI * 2);
         ctx.fill();
 
+        // Bordure plus sombre
+        ctx.strokeStyle = '#008800';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
         // Yeux rouges
         ctx.fillStyle = '#ff0000';
         ctx.beginPath();
@@ -186,13 +284,22 @@ function render() {
         ctx.arc(zombie.x + 8, zombie.y - 5, 3, 0, Math.PI * 2);
         ctx.fill();
 
+        // Bouche
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(zombie.x, zombie.y + 5, 6, 0, Math.PI);
+        ctx.stroke();
+
         // Barre de vie zombie
-        const healthPercent = zombie.health / config.ZOMBIE_HEALTH;
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(zombie.x - 20, zombie.y - 35, 40 * healthPercent, 5);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(zombie.x - 20, zombie.y - 35, 40, 5);
+        if (zombie.maxHealth) {
+            const healthPercent = zombie.health / zombie.maxHealth;
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(zombie.x - 20, zombie.y - 35, 40 * healthPercent, 5);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(zombie.x - 20, zombie.y - 35, 40, 5);
+        }
     }
 
     // Dessiner les joueurs
@@ -202,31 +309,46 @@ function render() {
 
         if (!p.alive) continue;
 
+        // Effet de vitesse
+        let glowColor = isCurrentPlayer ? '#0088ff' : '#ff8800';
+        if (p.speedBoost && Date.now() < p.speedBoost) {
+            glowColor = '#00ffff';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#00ffff';
+        }
+
         // Corps du joueur
         ctx.fillStyle = isCurrentPlayer ? '#0088ff' : '#ff8800';
         ctx.beginPath();
         ctx.arc(p.x, p.y, config.PLAYER_SIZE, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
 
-        // Direction de visée
+        // Bordure
         ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Direction de visée (arme)
+        const weaponLength = config.PLAYER_SIZE * 2;
+        ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
+        ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(
-            p.x + Math.cos(p.angle) * config.PLAYER_SIZE * 2,
-            p.y + Math.sin(p.angle) * config.PLAYER_SIZE * 2
+            p.x + Math.cos(p.angle) * weaponLength,
+            p.y + Math.sin(p.angle) * weaponLength
         );
         ctx.stroke();
 
         // Nom du joueur
         ctx.fillStyle = '#fff';
-        ctx.font = '12px Arial';
+        ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(
             isCurrentPlayer ? 'Vous' : 'Joueur',
             p.x,
-            p.y - config.PLAYER_SIZE - 10
+            p.y - config.PLAYER_SIZE - 15
         );
 
         // Barre de vie
@@ -239,6 +361,9 @@ function render() {
     }
 
     ctx.restore();
+
+    // Dessiner la minimap
+    drawMinimap();
 }
 
 // Grille de fond
@@ -262,6 +387,74 @@ function drawGrid() {
         ctx.moveTo(camera.x, y);
         ctx.lineTo(camera.x + canvas.width, y);
         ctx.stroke();
+    }
+}
+
+// Dessiner la minimap
+function drawMinimap() {
+    if (!config.WORLD_WIDTH) return;
+
+    const mapWidth = minimap.width;
+    const mapHeight = minimap.height;
+    const scaleX = mapWidth / config.WORLD_WIDTH;
+    const scaleY = mapHeight / config.WORLD_HEIGHT;
+
+    // Fond
+    minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    minimapCtx.fillRect(0, 0, mapWidth, mapHeight);
+
+    // Bordure du monde
+    minimapCtx.strokeStyle = '#ff0000';
+    minimapCtx.lineWidth = 2;
+    minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
+
+    // Zombies
+    minimapCtx.fillStyle = '#00ff00';
+    for (let zombieId in gameState.zombies) {
+        const zombie = gameState.zombies[zombieId];
+        minimapCtx.beginPath();
+        minimapCtx.arc(zombie.x * scaleX, zombie.y * scaleY, 2, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
+    // Power-ups
+    minimapCtx.fillStyle = '#ffff00';
+    for (let powerupId in gameState.powerups) {
+        const powerup = gameState.powerups[powerupId];
+        minimapCtx.beginPath();
+        minimapCtx.arc(powerup.x * scaleX, powerup.y * scaleY, 3, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
+    // Autres joueurs
+    minimapCtx.fillStyle = '#ff8800';
+    for (let pid in gameState.players) {
+        if (pid === playerId) continue;
+        const p = gameState.players[pid];
+        if (!p.alive) continue;
+        minimapCtx.beginPath();
+        minimapCtx.arc(p.x * scaleX, p.y * scaleY, 4, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
+    // Joueur actuel (toujours en dernier pour être au-dessus)
+    const player = gameState.players[playerId];
+    if (player && player.alive) {
+        minimapCtx.fillStyle = '#0088ff';
+        minimapCtx.beginPath();
+        minimapCtx.arc(player.x * scaleX, player.y * scaleY, 5, 0, Math.PI * 2);
+        minimapCtx.fill();
+
+        // Direction
+        minimapCtx.strokeStyle = '#00ffff';
+        minimapCtx.lineWidth = 2;
+        minimapCtx.beginPath();
+        minimapCtx.moveTo(player.x * scaleX, player.y * scaleY);
+        minimapCtx.lineTo(
+            player.x * scaleX + Math.cos(player.angle) * 10,
+            player.y * scaleY + Math.sin(player.angle) * 10
+        );
+        minimapCtx.stroke();
     }
 }
 
