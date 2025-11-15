@@ -37,26 +37,26 @@ const gameState = {
   }
 };
 
-// Configuration du jeu
+// Configuration du jeu (MAP ÉNORME pour exploration libre)
 const CONFIG = {
-  ROOM_WIDTH: 800,
-  ROOM_HEIGHT: 600,
-  WALL_THICKNESS: 20,
-  PLAYER_SPEED: 6.5, // Augmenté pour plus de fluidité
+  ROOM_WIDTH: 3000, // Map beaucoup plus grande (800 -> 3000)
+  ROOM_HEIGHT: 2400, // Map beaucoup plus grande (600 -> 2400)
+  WALL_THICKNESS: 40, // Murs plus épais pour la grande map
+  PLAYER_SPEED: 8, // Vitesse augmentée pour la grande map
   PLAYER_SIZE: 20,
   ZOMBIE_SIZE: 25,
-  ZOMBIE_SPAWN_INTERVAL: 2500, // Spawns plus rapides (3000 -> 2500ms)
-  MAX_ZOMBIES: 15,
+  ZOMBIE_SPAWN_INTERVAL: 2000, // Spawns plus rapides pour remplir la map
+  MAX_ZOMBIES: 35, // Plus de zombies simultanés (15 -> 35)
   BULLET_SPEED: 10,
   BULLET_DAMAGE: 34,
   BULLET_SIZE: 5,
   PLAYER_MAX_HEALTH: 100,
   POWERUP_SPAWN_INTERVAL: 15000,
   POWERUP_SIZE: 15,
-  ZOMBIES_PER_ROOM: 8, // Réduit de 10 à 8 zombies par salle
+  ZOMBIES_PER_ROOM: 20, // Plus de zombies pour remplir la grande map (8 -> 20)
   LOOT_SIZE: 10,
-  DOOR_WIDTH: 80,
-  ROOMS_PER_RUN: 3 // Réduit de 5 à 3 salles pour un jeu plus rapide
+  DOOR_WIDTH: 120, // Porte plus large
+  ROOMS_PER_RUN: 3
 };
 
 // Types d'armes (Améliorées pour un gameplay plus rapide)
