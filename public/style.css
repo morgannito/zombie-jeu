@@ -989,3 +989,212 @@ body {
 #level-up-screen {
   contain: layout style paint;
 }
+
+/* ============================================
+   MOBILE CONTROLS
+   ============================================ */
+
+#mobile-controls {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: var(--z-ui);
+}
+
+/* Virtual Joystick */
+#joystick-container {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  width: 150px;
+  height: 150px;
+  pointer-events: auto;
+}
+
+#joystick-base {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  background: radial-gradient(circle, rgba(0, 255, 0, 0.3) 0%, rgba(0, 255, 0, 0.1) 70%, transparent 100%);
+  border: 3px solid rgba(0, 255, 0, 0.5);
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.4), inset 0 0 20px rgba(0, 255, 0, 0.2);
+  backdrop-filter: blur(5px);
+}
+
+#joystick-stick {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  background: radial-gradient(circle, rgba(0, 255, 0, 0.9) 0%, rgba(0, 255, 0, 0.6) 100%);
+  border: 3px solid rgba(0, 255, 0, 1);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.3);
+  transition: all 0.1s ease-out;
+  cursor: pointer;
+  /* Performance */
+  will-change: transform;
+}
+
+/* Auto-shoot button */
+#auto-shoot-container {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  pointer-events: auto;
+}
+
+#auto-shoot-btn {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 68, 68, 0.9) 0%, rgba(200, 0, 0, 0.9) 100%);
+  border: 4px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 25px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  transition: all 0.2s ease;
+  /* Performance */
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+#auto-shoot-btn:active {
+  transform: scale(0.9);
+  box-shadow: 0 0 30px rgba(255, 68, 68, 1), inset 0 0 30px rgba(255, 255, 255, 0.4);
+}
+
+#auto-shoot-btn.active {
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.9) 0%, rgba(255, 140, 0, 0.9) 100%);
+  border-color: rgba(255, 215, 0, 1);
+  box-shadow: 0 0 35px rgba(255, 215, 0, 1), inset 0 0 20px rgba(255, 255, 255, 0.3);
+  animation: pulse-shoot 0.5s ease-in-out infinite;
+}
+
+.shoot-icon {
+  font-size: 2.5rem;
+  filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.8));
+}
+
+.shoot-text {
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+  letter-spacing: 1px;
+}
+
+@keyframes pulse-shoot {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  #stats {
+    font-size: 0.75rem;
+    padding: 0.5rem;
+  }
+
+  #health-bar,
+  #xp-bar {
+    width: 8rem;
+    height: 0.875rem;
+  }
+
+  #minimap {
+    width: 100px;
+    height: 100px;
+    bottom: auto;
+    left: auto;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  #instructions {
+    display: none;
+  }
+
+  #joystick-container {
+    bottom: 1rem;
+    left: 1rem;
+    width: 120px;
+    height: 120px;
+  }
+
+  #joystick-base {
+    width: 120px;
+    height: 120px;
+  }
+
+  #joystick-stick {
+    width: 50px;
+    height: 50px;
+  }
+
+  #auto-shoot-container {
+    bottom: 1rem;
+    right: 1rem;
+  }
+
+  #auto-shoot-btn {
+    width: 100px;
+    height: 100px;
+  }
+
+  .shoot-icon {
+    font-size: 2rem;
+  }
+
+  .shoot-text {
+    font-size: 0.625rem;
+  }
+}
+
+/* Landscape mode on mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  #joystick-container {
+    bottom: 0.5rem;
+    left: 0.5rem;
+    width: 100px;
+    height: 100px;
+  }
+
+  #joystick-base {
+    width: 100px;
+    height: 100px;
+  }
+
+  #joystick-stick {
+    width: 40px;
+    height: 40px;
+  }
+
+  #auto-shoot-btn {
+    width: 80px;
+    height: 80px;
+  }
+
+  .shoot-icon {
+    font-size: 1.5rem;
+  }
+
+  .shoot-text {
+    font-size: 0.5rem;
+  }
+}

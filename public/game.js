@@ -92,6 +92,7 @@ class InputManager {
   constructor() {
     this.keys = {};
     this.mouse = { x: 0, y: 0 };
+    this.mobileControls = null;
     this.setupEventListeners();
   }
 
@@ -124,23 +125,244 @@ class InputManager {
     return this.keys[key] === true;
   }
 
+  setMobileControls(mobileControls) {
+    this.mobileControls = mobileControls;
+  }
+
   getMovementVector() {
     let dx = 0;
     let dy = 0;
 
-    // WASD or Arrow keys
-    if (this.isKeyPressed('w') || this.isKeyPressed('arrowup') || this.isKeyPressed('z')) dy -= 1;
-    if (this.isKeyPressed('s') || this.isKeyPressed('arrowdown')) dy += 1;
-    if (this.isKeyPressed('a') || this.isKeyPressed('arrowleft') || this.isKeyPressed('q')) dx -= 1;
-    if (this.isKeyPressed('d') || this.isKeyPressed('arrowright')) dx += 1;
+    // Mobile joystick input (takes priority)
+    if (this.mobileControls && this.mobileControls.isActive()) {
+      const joystickVector = this.mobileControls.getJoystickVector();
+      dx = joystickVector.dx;
+      dy = joystickVector.dy;
+    } else {
+      // WASD or Arrow keys
+      if (this.isKeyPressed('w') || this.isKeyPressed('arrowup') || this.isKeyPressed('z')) dy -= 1;
+      if (this.isKeyPressed('s') || this.isKeyPressed('arrowdown')) dy += 1;
+      if (this.isKeyPressed('a') || this.isKeyPressed('arrowleft') || this.isKeyPressed('q')) dx -= 1;
+      if (this.isKeyPressed('d') || this.isKeyPressed('arrowright')) dx += 1;
 
-    // Normalize diagonal movement
-    if (dx !== 0 && dy !== 0) {
-      dx *= 0.707;
-      dy *= 0.707;
+      // Normalize diagonal movement
+      if (dx !== 0 && dy !== 0) {
+        dx *= 0.707;
+        dy *= 0.707;
+      }
     }
 
     return { dx, dy };
+  }
+}
+
+/* ============================================
+   MOBILE CONTROLS MANAGER
+   ============================================ */
+
+class MobileControlsManager {
+  constructor() {
+    this.isMobile = this.detectMobile();
+    this.joystickActive = false;
+    this.joystickVector = { dx: 0, dy: 0 };
+    this.autoShootActive = false;
+    this.autoShootInterval = null;
+
+    if (this.isMobile) {
+      this.showMobileControls();
+      this.setupJoystick();
+      this.setupAutoShoot();
+    }
+  }
+
+  detectMobile() {
+    // Check for touch support and screen size
+    const isTouchDevice = ('ontouchstart' in window) ||
+                         (navigator.maxTouchPoints > 0) ||
+                         (navigator.msMaxTouchPoints > 0);
+    const isSmallScreen = window.innerWidth <= 768;
+    return isTouchDevice && isSmallScreen;
+  }
+
+  showMobileControls() {
+    const mobileControls = document.getElementById('mobile-controls');
+    if (mobileControls) {
+      mobileControls.style.display = 'block';
+    } else {
+      console.warn('Mobile controls: Container element not found');
+    }
+
+    // Hide instructions on mobile
+    const instructions = document.getElementById('instructions');
+    if (instructions) {
+      instructions.style.display = 'none';
+    }
+  }
+
+  setupJoystick() {
+    const joystickBase = document.getElementById('joystick-base');
+    const joystickStick = document.getElementById('joystick-stick');
+
+    if (!joystickBase || !joystickStick) {
+      console.warn('Mobile controls: Joystick elements not found');
+      return;
+    }
+
+    let touchId = null;
+    const maxDistance = 45; // Maximum distance the stick can move from center
+
+    const handleTouchStart = (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      touchId = touch.identifier;
+      this.joystickActive = true;
+      this.updateJoystickPosition(touch, joystickBase, joystickStick, maxDistance);
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      if (!this.joystickActive) return;
+
+      const touch = Array.from(e.touches).find(t => t.identifier === touchId);
+      if (touch) {
+        this.updateJoystickPosition(touch, joystickBase, joystickStick, maxDistance);
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      e.preventDefault();
+      this.joystickActive = false;
+      this.joystickVector = { dx: 0, dy: 0 };
+
+      // Reset stick position
+      joystickStick.style.transform = 'translate(-50%, -50%)';
+    };
+
+    joystickBase.addEventListener('touchstart', handleTouchStart, { passive: false });
+    joystickBase.addEventListener('touchmove', handleTouchMove, { passive: false });
+    joystickBase.addEventListener('touchend', handleTouchEnd, { passive: false });
+    joystickBase.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+  }
+
+  updateJoystickPosition(touch, base, stick, maxDistance) {
+    const rect = base.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    let dx = touch.clientX - centerX;
+    let dy = touch.clientY - centerY;
+
+    // Calculate distance from center
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Limit to max distance
+    if (distance > maxDistance) {
+      const angle = Math.atan2(dy, dx);
+      dx = Math.cos(angle) * maxDistance;
+      dy = Math.sin(angle) * maxDistance;
+    }
+
+    // Update stick visual position
+    stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+    // Normalize vector for movement (-1 to 1)
+    this.joystickVector = {
+      dx: dx / maxDistance,
+      dy: dy / maxDistance
+    };
+  }
+
+  setupAutoShoot() {
+    const autoShootBtn = document.getElementById('auto-shoot-btn');
+    if (!autoShootBtn) {
+      console.warn('Mobile controls: Auto-shoot button not found');
+      return;
+    }
+
+    autoShootBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.toggleAutoShoot();
+    });
+  }
+
+  toggleAutoShoot() {
+    this.autoShootActive = !this.autoShootActive;
+    const autoShootBtn = document.getElementById('auto-shoot-btn');
+
+    if (this.autoShootActive) {
+      autoShootBtn.classList.add('active');
+      this.startAutoShoot();
+    } else {
+      autoShootBtn.classList.remove('active');
+      this.stopAutoShoot();
+    }
+  }
+
+  startAutoShoot() {
+    // Auto shoot every 100ms when active (server will handle fire rate limiting)
+    this.autoShootInterval = setInterval(() => {
+      if (!this.autoShootActive) return;
+
+      // Verify all required objects exist
+      if (!window.gameState || !window.networkManager || !window.playerController) return;
+
+      const player = window.gameState.getPlayer();
+      if (!player || !player.alive || !playerController.gameStarted) return;
+
+      // Find nearest zombie and shoot at it
+      const nearestZombie = this.findNearestZombie(player);
+      if (nearestZombie) {
+        const angle = Math.atan2(
+          nearestZombie.y - player.y,
+          nearestZombie.x - player.x
+        );
+        window.networkManager.shoot(angle);
+      }
+    }, 100);
+  }
+
+  stopAutoShoot() {
+    if (this.autoShootInterval) {
+      clearInterval(this.autoShootInterval);
+      this.autoShootInterval = null;
+    }
+  }
+
+  findNearestZombie(player) {
+    if (!window.gameState || !window.gameState.state || !window.gameState.state.zombies) {
+      return null;
+    }
+
+    const zombies = Object.values(window.gameState.state.zombies);
+    if (zombies.length === 0) return null;
+
+    let nearestZombie = null;
+    let minDistance = Infinity;
+
+    zombies.forEach(zombie => {
+      const dx = zombie.x - player.x;
+      const dy = zombie.y - player.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestZombie = zombie;
+      }
+    });
+
+    return nearestZombie;
+  }
+
+  isActive() {
+    return this.joystickActive;
+  }
+
+  getJoystickVector() {
+    return this.joystickVector;
+  }
+
+  cleanup() {
+    this.stopAutoShoot();
   }
 }
 
@@ -1275,20 +1497,26 @@ class GameEngine {
     window.networkManager = new NetworkManager(io());
     window.gameUI = new UIManager(gameState);
 
-    this.playerController = new PlayerController(inputManager, networkManager, gameState, camera);
+    // Mobile controls
+    this.mobileControls = new MobileControlsManager();
+    inputManager.setMobileControls(this.mobileControls);
+    window.playerController = this.playerController = new PlayerController(inputManager, networkManager, gameState, camera);
+
     this.renderer = new Renderer(this.canvas, this.ctx, this.minimapCanvas, this.minimapCtx);
     this.renderer.setCamera(camera);
 
     this.nicknameManager = new NicknameManager(this.playerController);
 
-    // Mouse events
-    this.canvas.addEventListener('mousemove', (e) => {
-      inputManager.updateMouse(e.clientX, e.clientY);
-    });
+    // Mouse events (only if not mobile)
+    if (!this.mobileControls.isMobile) {
+      this.canvas.addEventListener('mousemove', (e) => {
+        inputManager.updateMouse(e.clientX, e.clientY);
+      });
 
-    this.canvas.addEventListener('click', () => {
-      this.playerController.shoot(this.canvas.width, this.canvas.height);
-    });
+      this.canvas.addEventListener('click', () => {
+        this.playerController.shoot(this.canvas.width, this.canvas.height);
+      });
+    }
   }
 
   update() {
