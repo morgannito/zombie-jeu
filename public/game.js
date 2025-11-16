@@ -995,9 +995,16 @@ class Renderer {
   render(gameState, playerId) {
     this.clear();
 
+    // Scale context for Retina displays (canvas is already physically sized × pixelRatio)
+    // This allows us to draw in CSS pixels while the canvas renders at device pixels
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.ctx.save();
+    this.ctx.scale(pixelRatio, pixelRatio);
+
     const player = gameState.state.players[playerId];
     if (!player) {
       this.renderWaitingMessage();
+      this.ctx.restore();
       return;
     }
 
@@ -1023,6 +1030,8 @@ class Renderer {
 
     // Render minimap
     this.renderMinimap(gameState, playerId);
+
+    this.ctx.restore(); // Restore pixelRatio scaling
   }
 
   renderWaitingMessage() {
@@ -1401,8 +1410,13 @@ class Renderer {
   renderMinimap(gameState, playerId) {
     if (!gameState.config.ROOM_WIDTH) return;
 
-    const mapWidth = this.minimapCanvas.width;
-    const mapHeight = this.minimapCanvas.height;
+    // Scale context for Retina displays
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.minimapCtx.save();
+    this.minimapCtx.scale(pixelRatio, pixelRatio);
+
+    const mapWidth = this.minimapCanvas.width / pixelRatio;
+    const mapHeight = this.minimapCanvas.height / pixelRatio;
     const scaleX = mapWidth / gameState.config.ROOM_WIDTH;
     const scaleY = mapHeight / gameState.config.ROOM_HEIGHT;
 
@@ -1478,6 +1492,8 @@ class Renderer {
     this.minimapCtx.strokeStyle = '#00ff00';
     this.minimapCtx.lineWidth = 2;
     this.minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
+
+    this.minimapCtx.restore(); // Restore pixelRatio scaling
   }
 }
 
