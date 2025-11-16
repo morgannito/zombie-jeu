@@ -890,6 +890,51 @@ class Renderer {
     }
   }
 
+  renderPlayerNameBubble(x, y, text, isCurrentPlayer, offsetY = -40) {
+    // Measure text to calculate bubble size
+    this.ctx.font = 'bold 14px Arial';
+    const textMetrics = this.ctx.measureText(text);
+    const textWidth = textMetrics.width;
+
+    // Bubble dimensions
+    const paddingX = 12;
+    const paddingY = 8;
+    const bubbleWidth = textWidth + paddingX * 2;
+    const bubbleHeight = 24;
+    const borderRadius = 12;
+
+    // Bubble position (centered above player)
+    const bubbleX = x - bubbleWidth / 2;
+    const bubbleY = y + offsetY - bubbleHeight / 2;
+
+    // Draw bubble background with rounded corners (manual path for compatibility)
+    this.ctx.fillStyle = isCurrentPlayer ? 'rgba(0, 136, 255, 0.9)' : 'rgba(255, 136, 0, 0.9)';
+    this.ctx.beginPath();
+    this.ctx.moveTo(bubbleX + borderRadius, bubbleY);
+    this.ctx.lineTo(bubbleX + bubbleWidth - borderRadius, bubbleY);
+    this.ctx.arcTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + borderRadius, borderRadius);
+    this.ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - borderRadius);
+    this.ctx.arcTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - borderRadius, bubbleY + bubbleHeight, borderRadius);
+    this.ctx.lineTo(bubbleX + borderRadius, bubbleY + bubbleHeight);
+    this.ctx.arcTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - borderRadius, borderRadius);
+    this.ctx.lineTo(bubbleX, bubbleY + borderRadius);
+    this.ctx.arcTo(bubbleX, bubbleY, bubbleX + borderRadius, bubbleY, borderRadius);
+    this.ctx.closePath();
+    this.ctx.fill();
+
+    // Draw bubble border
+    this.ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+
+    // Draw text inside bubble
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.font = 'bold 14px Arial';
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(text, x, y + offsetY);
+  }
+
   renderPlayers(players, currentPlayerId, config) {
     Object.entries(players).forEach(([pid, p]) => {
       const isCurrentPlayer = pid === currentPlayerId;
@@ -925,15 +970,10 @@ class Renderer {
       );
       this.ctx.stroke();
 
-      // Player name and level
-      this.ctx.fillStyle = '#fff';
-      this.ctx.font = 'bold 12px Arial';
-      this.ctx.textAlign = 'center';
-      this.ctx.strokeStyle = '#000';
-      this.ctx.lineWidth = 3;
-      const playerLabel = isCurrentPlayer ? `Vous (Lv${p.level || 1})` : `Joueur (Lv${p.level || 1})`;
-      this.ctx.strokeText(playerLabel, p.x, p.y - config.PLAYER_SIZE - 15);
-      this.ctx.fillText(playerLabel, p.x, p.y - config.PLAYER_SIZE - 15);
+      // Player name bubble with nickname
+      const nickname = p.nickname || (isCurrentPlayer ? 'Vous' : 'Joueur');
+      const playerLabel = `${nickname} (Lv${p.level || 1})`;
+      this.renderPlayerNameBubble(p.x, p.y, playerLabel, isCurrentPlayer, -config.PLAYER_SIZE - 25);
 
       // Health bar
       const healthPercent = p.health / p.maxHealth;
