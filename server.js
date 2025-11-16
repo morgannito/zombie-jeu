@@ -605,23 +605,23 @@ function getXPForLevel(level) {
   }
 }
 
-// Spawn des zombies (MODE INFINI avec vagues)
-function spawnZombie() {
-  if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) {
-    return;
+// Calculer le nombre de zombies à spawner par batch selon la vague
+function getZombiesPerBatch() {
+  if (gameState.wave <= 2) {
+    return 2; // Vagues 1-2 : 2 zombies à la fois
+  } else if (gameState.wave <= 5) {
+    return 3; // Vagues 3-5 : 3 zombies à la fois
+  } else if (gameState.wave <= 8) {
+    return 5; // Vagues 6-8 : 5 zombies à la fois
+  } else if (gameState.wave <= 12) {
+    return 7; // Vagues 9-12 : 7 zombies à la fois
+  } else {
+    return 10; // Vagues 13+ : 10 zombies à la fois (CHAOS!)
   }
+}
 
-  // Limiter le spawn selon la vague actuelle - Progression agressive
-  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 5; // +5 zombies par vague (difficulté croissante)
-
-  if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
-    // Spawner le boss si pas encore fait
-    if (!gameState.bossSpawned && Object.keys(gameState.zombies).length === 0) {
-      spawnBoss();
-    }
-    return;
-  }
-
+// Spawner un seul zombie (fonction utilitaire)
+function spawnSingleZombie() {
   // Position aléatoire dans la salle (éviter les murs)
   let x, y;
   let attempts = 0;
@@ -631,7 +631,7 @@ function spawnZombie() {
     attempts++;
   } while (checkWallCollision(x, y, CONFIG.ZOMBIE_SIZE) && attempts < 50);
 
-  if (attempts >= 50) return; // Pas de place disponible
+  if (attempts >= 50) return false; // Pas de place disponible
 
   // Choisir un type de zombie avec pondération progressive selon la vague
   // Plus la vague est élevée, plus les zombies dangereux sont fréquents
@@ -680,6 +680,39 @@ function spawnZombie() {
   };
 
   gameState.zombiesSpawnedThisWave++;
+  return true;
+}
+
+// Spawn des zombies en groupes (MODE INFINI avec vagues)
+function spawnZombie() {
+  if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) {
+    return;
+  }
+
+  // Limiter le spawn selon la vague actuelle - Progression agressive
+  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 5; // +5 zombies par vague (difficulté croissante)
+
+  if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
+    // Spawner le boss si pas encore fait
+    if (!gameState.bossSpawned && Object.keys(gameState.zombies).length === 0) {
+      spawnBoss();
+    }
+    return;
+  }
+
+  // Spawner plusieurs zombies à la fois (batch spawning)
+  const batchSize = getZombiesPerBatch();
+  let spawned = 0;
+
+  for (let i = 0; i < batchSize; i++) {
+    // Vérifier si on a atteint les limites
+    if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) break;
+    if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) break;
+
+    if (spawnSingleZombie()) {
+      spawned++;
+    }
+  }
 }
 
 // Spawner un boss zombie (MODE INFINI - difficulté croissante)
