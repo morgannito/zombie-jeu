@@ -1018,11 +1018,11 @@ body {
   position: relative;
   width: 150px;
   height: 150px;
-  background: radial-gradient(circle, rgba(0, 255, 0, 0.3) 0%, rgba(0, 255, 0, 0.1) 70%, transparent 100%);
-  border: 3px solid rgba(0, 255, 0, 0.5);
+  background: radial-gradient(circle, rgba(0, 255, 0, 0.2) 0%, rgba(0, 255, 0, 0.05) 70%, transparent 100%);
+  border: 3px solid rgba(0, 255, 0, 0.4);
   border-radius: 50%;
-  box-shadow: 0 0 20px rgba(0, 255, 0, 0.4), inset 0 0 20px rgba(0, 255, 0, 0.2);
-  backdrop-filter: blur(5px);
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
+  backdrop-filter: blur(3px);
 }
 
 #joystick-stick {
@@ -1054,9 +1054,9 @@ body {
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 68, 68, 0.9) 0%, rgba(200, 0, 0, 0.9) 100%);
-  border: 4px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 0 25px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.2);
+  background: radial-gradient(circle, rgba(255, 68, 68, 0.85) 0%, rgba(200, 0, 0, 0.85) 100%);
+  border: 4px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 25px rgba(255, 68, 68, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.2);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -1067,6 +1067,7 @@ body {
   /* Performance */
   will-change: transform;
   transform: translateZ(0);
+  backdrop-filter: blur(2px);
 }
 
 #auto-shoot-btn:active {
@@ -1117,13 +1118,14 @@ body {
   }
 
   #minimap {
-    width: 100px;
-    height: 100px;
+    width: 80px;
+    height: 80px;
     bottom: auto;
     left: auto;
     right: 0.5rem;
     top: 50%;
     transform: translateY(-50%);
+    opacity: 0.85;
   }
 
   #instructions {
