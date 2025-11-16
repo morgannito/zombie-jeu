@@ -307,7 +307,15 @@ class PlayerController {
 
   update(canvasWidth, canvasHeight) {
     const player = this.gameState.getPlayer();
-    if (!player || !player.alive || !this.gameStarted) return;
+    if (!player || !player.alive) {
+      return;
+    }
+
+    // Always update camera to follow player, even before game starts
+    this.camera.follow(player, canvasWidth, canvasHeight);
+
+    // Only allow movement after game has started
+    if (!this.gameStarted) return;
 
     // Update movement
     const { dx, dy } = this.input.getMovementVector();
@@ -343,9 +351,6 @@ class PlayerController {
       // Send to server
       this.network.playerMove(newX, newY, angle);
     }
-
-    // Update camera
-    this.camera.follow(player, canvasWidth, canvasHeight);
   }
 
   shoot() {
