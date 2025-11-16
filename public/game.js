@@ -29,6 +29,12 @@ const CONSTANTS = {
     SHOP_DELAY: 2000,
     MILESTONE_DELAY: 2500,
     BOSS_ANNOUNCEMENT: 2500
+  },
+  MOBILE: {
+    AUTO_SHOOT_INTERVAL: 250, // ms between auto-shoot attempts
+    GESTURE_THRESHOLD: 50, // minimum distance for swipe detection
+    LONG_PRESS_DURATION: 500, // ms for long press detection
+    DOUBLE_TAP_DELAY: 300 // ms between taps for double-tap
   }
 };
 
@@ -80,7 +86,6 @@ class GameStateManager {
     this.powerupTypes = data.powerupTypes;
     this.zombieTypes = data.zombieTypes;
     this.shopItems = data.shopItems;
-    console.log('🎮 Game initialized! Player ID:', this.playerId);
   }
 }
 
@@ -93,13 +98,26 @@ class InputManager {
     this.keys = {};
     this.mouse = { x: 0, y: 0 };
     this.mobileControls = null;
+
+    // Store handler references for cleanup
+    this.handlers = {
+      keydown: (e) => this.handleKeyDown(e),
+      keyup: (e) => this.handleKeyUp(e)
+    };
+
     this.setupEventListeners();
   }
 
   setupEventListeners() {
     // Keyboard events
-    window.addEventListener('keydown', (e) => this.handleKeyDown(e));
-    window.addEventListener('keyup', (e) => this.handleKeyUp(e));
+    window.addEventListener('keydown', this.handlers.keydown);
+    window.addEventListener('keyup', this.handlers.keyup);
+  }
+
+  cleanup() {
+    // Remove keyboard event listeners
+    window.removeEventListener('keydown', this.handlers.keydown);
+    window.removeEventListener('keyup', this.handlers.keyup);
   }
 
   handleKeyDown(e) {
@@ -108,7 +126,9 @@ class InputManager {
     // TAB key for stats panel
     if (e.key === 'Tab') {
       e.preventDefault();
-      gameUI.toggleStatsPanel();
+      if (window.gameUI) {
+        window.gameUI.toggleStatsPanel();
+      }
     }
   }
 
@@ -157,6 +177,147 @@ class InputManager {
 }
 
 /* ============================================
+   AUDIO MANAGER (Simple synthesized sounds)
+   ============================================ */
+
+class AudioManager {
+  constructor() {
+    this.audioContext = null;
+    this.enabled = true;
+    this.initAudioContext();
+  }
+
+  initAudioContext() {
+    try {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn('Web Audio API not supported');
+      this.enabled = false;
+    }
+  }
+
+  play(soundType) {
+    if (!this.enabled || !this.audioContext) return;
+
+    // Resume audio context if needed (for mobile auto-play restrictions)
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
+    const now = this.audioContext.currentTime;
+
+    switch (soundType) {
+      case 'shoot':
+        this.playShoot(now);
+        break;
+      case 'doubleClick':
+        this.playDoubleClick(now);
+        break;
+      case 'longPress':
+        this.playLongPress(now);
+        break;
+      case 'swipe':
+        this.playSwipe(now);
+        break;
+      case 'click':
+        this.playClick(now);
+        break;
+      default:
+        break;
+    }
+  }
+
+  playShoot(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(800, startTime);
+    osc.frequency.exponentialRampToValueAtTime(200, startTime + 0.1);
+
+    gain.gain.setValueAtTime(0.1, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.1);
+  }
+
+  playDoubleClick(startTime) {
+    for (let i = 0; i < 2; i++) {
+      const osc = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+
+      osc.connect(gain);
+      gain.connect(this.audioContext.destination);
+
+      const time = startTime + i * 0.1;
+      osc.frequency.setValueAtTime(1200, time);
+      gain.gain.setValueAtTime(0.1, time);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+      osc.start(time);
+      osc.stop(time + 0.05);
+    }
+  }
+
+  playLongPress(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(600, startTime);
+    osc.frequency.linearRampToValueAtTime(900, startTime + 0.2);
+
+    gain.gain.setValueAtTime(0.08, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.2);
+  }
+
+  playSwipe(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(400, startTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, startTime + 0.15);
+
+    gain.gain.setValueAtTime(0.08, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.15);
+  }
+
+  playClick(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(1000, startTime);
+    gain.gain.setValueAtTime(0.1, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.05);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.05);
+  }
+
+  toggle() {
+    this.enabled = !this.enabled;
+    return this.enabled;
+  }
+}
+
+/* ============================================
    MOBILE CONTROLS MANAGER
    ============================================ */
 
@@ -167,11 +328,25 @@ class MobileControlsManager {
     this.joystickVector = { dx: 0, dy: 0 };
     this.autoShootActive = false;
     this.autoShootInterval = null;
+    this.currentTarget = null; // Store current auto-shoot target
+
+    // Gesture detection properties
+    this.lastTapTime = 0;
+    this.tapCount = 0;
+    this.longPressTimer = null;
+    this.swipeStartX = 0;
+    this.swipeStartY = 0;
+    this.swipeStartTime = 0;
+
+    // Store handlers and elements for cleanup
+    this.handlers = {};
+    this.elements = {};
 
     if (this.isMobile) {
       this.showMobileControls();
       this.setupJoystick();
       this.setupAutoShoot();
+      this.setupAdvancedGestures();
     }
   }
 
@@ -208,6 +383,9 @@ class MobileControlsManager {
       return;
     }
 
+    this.elements.joystickBase = joystickBase;
+    this.elements.joystickStick = joystickStick;
+
     let touchId = null;
     const maxDistance = 45; // Maximum distance the stick can move from center
 
@@ -216,6 +394,8 @@ class MobileControlsManager {
       const touch = e.touches[0];
       touchId = touch.identifier;
       this.joystickActive = true;
+      joystickBase.classList.add('active');
+      joystickStick.classList.add('active');
       this.updateJoystickPosition(touch, joystickBase, joystickStick, maxDistance);
     };
 
@@ -233,10 +413,17 @@ class MobileControlsManager {
       e.preventDefault();
       this.joystickActive = false;
       this.joystickVector = { dx: 0, dy: 0 };
+      joystickBase.classList.remove('active');
+      joystickStick.classList.remove('active');
 
       // Reset stick position
       joystickStick.style.transform = 'translate(-50%, -50%)';
     };
+
+    // Store handlers for cleanup
+    this.handlers.joystickStart = handleTouchStart;
+    this.handlers.joystickMove = handleTouchMove;
+    this.handlers.joystickEnd = handleTouchEnd;
 
     joystickBase.addEventListener('touchstart', handleTouchStart, { passive: false });
     joystickBase.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -279,10 +466,15 @@ class MobileControlsManager {
       return;
     }
 
-    autoShootBtn.addEventListener('touchstart', (e) => {
+    this.elements.autoShootBtn = autoShootBtn;
+
+    const handleAutoShoot = (e) => {
       e.preventDefault();
       this.toggleAutoShoot();
-    });
+    };
+
+    this.handlers.autoShoot = handleAutoShoot;
+    autoShootBtn.addEventListener('touchstart', handleAutoShoot);
   }
 
   toggleAutoShoot() {
@@ -292,14 +484,20 @@ class MobileControlsManager {
     if (this.autoShootActive) {
       autoShootBtn.classList.add('active');
       this.startAutoShoot();
+      if (window.audioManager) {
+        window.audioManager.play('click');
+      }
     } else {
       autoShootBtn.classList.remove('active');
       this.stopAutoShoot();
+      if (window.audioManager) {
+        window.audioManager.play('click');
+      }
     }
   }
 
   startAutoShoot() {
-    // Auto shoot every 100ms when active (server will handle fire rate limiting)
+    // Auto shoot at regular intervals (server will handle fire rate limiting)
     this.autoShootInterval = setInterval(() => {
       if (!this.autoShootActive) return;
 
@@ -307,10 +505,12 @@ class MobileControlsManager {
       if (!window.gameState || !window.networkManager || !window.playerController) return;
 
       const player = window.gameState.getPlayer();
-      if (!player || !player.alive || !playerController.gameStarted) return;
+      if (!player || !player.alive || !window.playerController.gameStarted) return;
 
       // Find nearest zombie and shoot at it
       const nearestZombie = this.findNearestZombie(player);
+      this.currentTarget = nearestZombie; // Store for visual indicator
+
       if (nearestZombie) {
         const angle = Math.atan2(
           nearestZombie.y - player.y,
@@ -320,7 +520,7 @@ class MobileControlsManager {
         player.angle = angle;
         window.networkManager.shoot(angle);
       }
-    }, 100);
+    }, CONSTANTS.MOBILE.AUTO_SHOOT_INTERVAL);
   }
 
   stopAutoShoot() {
@@ -328,6 +528,11 @@ class MobileControlsManager {
       clearInterval(this.autoShootInterval);
       this.autoShootInterval = null;
     }
+    this.currentTarget = null; // Clear target when stopping
+  }
+
+  getCurrentTarget() {
+    return this.currentTarget;
   }
 
   findNearestZombie(player) {
@@ -339,15 +544,35 @@ class MobileControlsManager {
     if (zombies.length === 0) return null;
 
     let nearestZombie = null;
-    let minDistance = Infinity;
+    let minScore = Infinity;
 
     zombies.forEach(zombie => {
       const dx = zombie.x - player.x;
       const dy = zombie.y - player.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < minDistance) {
-        minDistance = distance;
+      // Calculate angle to zombie
+      const angleToZombie = Math.atan2(dy, dx);
+      const playerAngle = player.angle || 0;
+
+      // Calculate angle difference (normalized to -π to π)
+      let angleDiff = angleToZombie - playerAngle;
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+      // Aim assist: prefer zombies in front of player
+      // Score = distance * angle_penalty
+      // Zombies directly in front have angle_penalty = 1
+      // Zombies behind have angle_penalty > 2
+      const anglePenalty = 1 + Math.abs(angleDiff) / Math.PI;
+
+      // Boss zombies get priority (lower score)
+      const bossPriority = zombie.isBoss ? 0.5 : 1;
+
+      const score = distance * anglePenalty * bossPriority;
+
+      if (score < minScore) {
+        minScore = score;
         nearestZombie = zombie;
       }
     });
@@ -363,8 +588,157 @@ class MobileControlsManager {
     return this.joystickVector;
   }
 
+  setupAdvancedGestures() {
+    const canvas = document.getElementById('gameCanvas');
+    if (!canvas) return;
+
+    this.elements.canvas = canvas;
+
+    // Swipe detection for pause menu (from edge)
+    const handleGestureTouchStart = (e) => {
+      const touch = e.touches[0];
+      this.swipeStartX = touch.clientX;
+      this.swipeStartY = touch.clientY;
+      this.swipeStartTime = Date.now();
+
+      // Long press detection
+      this.longPressTimer = setTimeout(() => {
+        this.handleLongPress(touch.clientX, touch.clientY);
+      }, 500);
+    };
+
+    const handleGestureTouchMove = (e) => {
+      // Cancel long press if moved
+      if (this.longPressTimer) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - this.swipeStartX;
+        const dy = touch.clientY - this.swipeStartY;
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+        }
+      }
+    };
+
+    const handleGestureTouchEnd = (e) => {
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+
+      if (e.changedTouches.length === 0) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - this.swipeStartX;
+      const dy = touch.clientY - this.swipeStartY;
+      const dt = Date.now() - this.swipeStartTime;
+
+      // Swipe detection (fast movement)
+      if (dt < 300 && Math.abs(dx) > 100) {
+        this.handleSwipe(dx > 0 ? 'right' : 'left');
+      }
+    };
+
+    // Store handlers for cleanup
+    this.handlers.gestureTouchStart = handleGestureTouchStart;
+    this.handlers.gestureTouchMove = handleGestureTouchMove;
+    this.handlers.gestureTouchEnd = handleGestureTouchEnd;
+
+    canvas.addEventListener('touchstart', handleGestureTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', handleGestureTouchMove, { passive: true });
+    canvas.addEventListener('touchend', handleGestureTouchEnd, { passive: true });
+
+    // Double-tap on auto-shoot for burst mode
+    const autoShootBtn = this.elements.autoShootBtn || document.getElementById('auto-shoot-btn');
+    if (autoShootBtn) {
+      const handleDoubleTapDetect = (e) => {
+        const now = Date.now();
+        if (now - this.lastTapTime < 300) {
+          this.tapCount++;
+          if (this.tapCount === 2) {
+            this.handleDoubleTap();
+            this.tapCount = 0;
+          }
+        } else {
+          this.tapCount = 1;
+        }
+        this.lastTapTime = now;
+      };
+
+      this.handlers.doubleTapDetect = handleDoubleTapDetect;
+      autoShootBtn.addEventListener('touchend', handleDoubleTapDetect, { passive: true });
+    }
+  }
+
+  handleDoubleTap() {
+    // Visual feedback for double-tap
+    // Could enable burst mode here
+    if (window.audioManager) {
+      window.audioManager.play('doubleClick');
+    }
+  }
+
+  handleLongPress(x, y) {
+    // Long press detected
+    if (window.audioManager) {
+      window.audioManager.play('longPress');
+    }
+    // Could trigger special ability or boost
+  }
+
+  handleSwipe(direction) {
+    // Swipe detected
+    if (direction === 'right' && this.swipeStartX < CONSTANTS.MOBILE.GESTURE_THRESHOLD) {
+      // Swipe from left edge - could open menu
+      if (window.audioManager) {
+        window.audioManager.play('swipe');
+      }
+    }
+  }
+
   cleanup() {
+    // Stop auto-shoot interval
     this.stopAutoShoot();
+
+    // Clear long press timer
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+
+    // Remove joystick event listeners
+    if (this.elements.joystickBase && this.handlers.joystickStart) {
+      this.elements.joystickBase.removeEventListener('touchstart', this.handlers.joystickStart);
+      this.elements.joystickBase.removeEventListener('touchmove', this.handlers.joystickMove);
+      this.elements.joystickBase.removeEventListener('touchend', this.handlers.joystickEnd);
+      this.elements.joystickBase.removeEventListener('touchcancel', this.handlers.joystickEnd);
+    }
+
+    // Remove auto-shoot event listener
+    if (this.elements.autoShootBtn && this.handlers.autoShoot) {
+      this.elements.autoShootBtn.removeEventListener('touchstart', this.handlers.autoShoot);
+    }
+
+    // Remove gesture event listeners
+    if (this.elements.canvas) {
+      if (this.handlers.gestureTouchStart) {
+        this.elements.canvas.removeEventListener('touchstart', this.handlers.gestureTouchStart);
+      }
+      if (this.handlers.gestureTouchMove) {
+        this.elements.canvas.removeEventListener('touchmove', this.handlers.gestureTouchMove);
+      }
+      if (this.handlers.gestureTouchEnd) {
+        this.elements.canvas.removeEventListener('touchend', this.handlers.gestureTouchEnd);
+      }
+    }
+
+    // Remove double-tap listener
+    if (this.elements.autoShootBtn && this.handlers.doubleTapDetect) {
+      this.elements.autoShootBtn.removeEventListener('touchend', this.handlers.doubleTapDetect);
+    }
+
+    // Clear references
+    this.handlers = {};
+    this.elements = {};
   }
 }
 
@@ -411,67 +785,79 @@ class NetworkManager {
   }
 
   handleInit(data) {
-    gameState.initialize(data);
+    window.gameState.initialize(data);
   }
 
   handleGameState(state) {
     // Client-side prediction for local player
-    if (gameState.state && gameState.state.players && gameState.state.players[gameState.playerId]) {
-      const localPlayer = gameState.state.players[gameState.playerId];
+    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const localPlayer = window.gameState.state.players[window.gameState.playerId];
       const { x, y, angle } = localPlayer;
 
-      gameState.updateState(state);
+      window.gameState.updateState(state);
 
       // Restore predicted position
-      if (gameState.state.players[gameState.playerId]) {
-        gameState.state.players[gameState.playerId].x = x;
-        gameState.state.players[gameState.playerId].y = y;
-        gameState.state.players[gameState.playerId].angle = angle;
+      if (window.gameState.state.players[window.gameState.playerId]) {
+        window.gameState.state.players[window.gameState.playerId].x = x;
+        window.gameState.state.players[window.gameState.playerId].y = y;
+        window.gameState.state.players[window.gameState.playerId].angle = angle;
       }
     } else {
-      gameState.updateState(state);
+      window.gameState.updateState(state);
     }
 
-    gameUI.update();
+    if (window.gameUI) {
+      window.gameUI.update();
+    }
   }
 
   handleBossSpawned(data) {
-    gameUI.showBossAnnouncement(data.bossName);
+    if (window.gameUI) {
+      window.gameUI.showBossAnnouncement(data.bossName);
+    }
   }
 
   handleNewWave(data) {
-    gameUI.showNewWaveAnnouncement(data.wave, data.zombiesCount);
-    setTimeout(() => gameUI.showShop(), CONSTANTS.ANIMATIONS.SHOP_DELAY);
+    if (window.gameUI) {
+      window.gameUI.showNewWaveAnnouncement(data.wave, data.zombiesCount);
+      setTimeout(() => window.gameUI.showShop(), CONSTANTS.ANIMATIONS.SHOP_DELAY);
+    }
   }
 
   handleLevelUp(data) {
-    if (data.milestoneBonus) {
-      gameUI.showMilestoneBonus(data.milestoneBonus, data.newLevel);
-      setTimeout(() => {
-        gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
-      }, CONSTANTS.ANIMATIONS.MILESTONE_DELAY);
-    } else {
-      gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
+    if (window.gameUI) {
+      if (data.milestoneBonus) {
+        window.gameUI.showMilestoneBonus(data.milestoneBonus, data.newLevel);
+        setTimeout(() => {
+          if (window.gameUI) {
+            window.gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
+          }
+        }, CONSTANTS.ANIMATIONS.MILESTONE_DELAY);
+      } else {
+        window.gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
+      }
     }
   }
 
   handleRoomChanged(data) {
-    gameUI.showRoomAnnouncement(data.roomIndex + 1, data.totalRooms);
-  }
-
-  handleRunCompleted(data) {
-    gameUI.showRunCompleted(data.gold, data.level);
-  }
-
-  handleUpgradeSelected(data) {
-    if (data.success) {
-      console.log('✅ Upgrade selected:', data.upgradeId);
+    if (window.gameUI) {
+      window.gameUI.showRoomAnnouncement(data.roomIndex + 1, data.totalRooms);
     }
   }
 
+  handleRunCompleted(data) {
+    if (window.gameUI) {
+      window.gameUI.showRunCompleted(data.gold, data.level);
+    }
+  }
+
+  handleUpgradeSelected(data) {
+    // Upgrade successfully selected
+  }
+
   handleShopUpdate(data) {
-    if (data.success && gameUI.shopOpen) {
-      gameUI.populateShop();
+    if (data.success && window.gameUI && window.gameUI.shopOpen) {
+      window.gameUI.populateShop();
     }
   }
 
@@ -625,16 +1011,26 @@ class Renderer {
   }
 
   clear() {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transforms
     this.ctx.fillStyle = '#0a0a0a';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
   }
 
   render(gameState, playerId) {
     this.clear();
 
+    // Scale context for Retina displays (canvas is already physically sized × pixelRatio)
+    // This allows us to draw in CSS pixels while the canvas renders at device pixels
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.ctx.save();
+    this.ctx.scale(pixelRatio, pixelRatio);
+
     const player = gameState.state.players[playerId];
     if (!player) {
       this.renderWaitingMessage();
+      this.ctx.restore();
       return;
     }
 
@@ -654,11 +1050,14 @@ class Renderer {
     this.renderBullets(gameState.state.bullets, gameState.config);
     this.renderZombies(gameState.state.zombies);
     this.renderPlayers(gameState.state.players, playerId, gameState.config);
+    this.renderTargetIndicator(player); // Show auto-shoot target indicator
 
     this.ctx.restore();
 
     // Render minimap
     this.renderMinimap(gameState, playerId);
+
+    this.ctx.restore(); // Restore pixelRatio scaling
   }
 
   renderWaitingMessage() {
@@ -890,6 +1289,51 @@ class Renderer {
     }
   }
 
+  renderPlayerNameBubble(x, y, text, isCurrentPlayer, offsetY = -40) {
+    // Measure text to calculate bubble size
+    this.ctx.font = 'bold 14px Arial';
+    const textMetrics = this.ctx.measureText(text);
+    const textWidth = textMetrics.width;
+
+    // Bubble dimensions
+    const paddingX = 12;
+    const paddingY = 8;
+    const bubbleWidth = textWidth + paddingX * 2;
+    const bubbleHeight = 24;
+    const borderRadius = 12;
+
+    // Bubble position (centered above player)
+    const bubbleX = x - bubbleWidth / 2;
+    const bubbleY = y + offsetY - bubbleHeight / 2;
+
+    // Draw bubble background with rounded corners (manual path for compatibility)
+    this.ctx.fillStyle = isCurrentPlayer ? 'rgba(0, 136, 255, 0.9)' : 'rgba(255, 136, 0, 0.9)';
+    this.ctx.beginPath();
+    this.ctx.moveTo(bubbleX + borderRadius, bubbleY);
+    this.ctx.lineTo(bubbleX + bubbleWidth - borderRadius, bubbleY);
+    this.ctx.arcTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + borderRadius, borderRadius);
+    this.ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - borderRadius);
+    this.ctx.arcTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - borderRadius, bubbleY + bubbleHeight, borderRadius);
+    this.ctx.lineTo(bubbleX + borderRadius, bubbleY + bubbleHeight);
+    this.ctx.arcTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - borderRadius, borderRadius);
+    this.ctx.lineTo(bubbleX, bubbleY + borderRadius);
+    this.ctx.arcTo(bubbleX, bubbleY, bubbleX + borderRadius, bubbleY, borderRadius);
+    this.ctx.closePath();
+    this.ctx.fill();
+
+    // Draw bubble border
+    this.ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+
+    // Draw text inside bubble
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.font = 'bold 14px Arial';
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(text, x, y + offsetY);
+  }
+
   renderPlayers(players, currentPlayerId, config) {
     Object.entries(players).forEach(([pid, p]) => {
       const isCurrentPlayer = pid === currentPlayerId;
@@ -925,15 +1369,10 @@ class Renderer {
       );
       this.ctx.stroke();
 
-      // Player name and level
-      this.ctx.fillStyle = '#fff';
-      this.ctx.font = 'bold 12px Arial';
-      this.ctx.textAlign = 'center';
-      this.ctx.strokeStyle = '#000';
-      this.ctx.lineWidth = 3;
-      const playerLabel = isCurrentPlayer ? `Vous (Lv${p.level || 1})` : `Joueur (Lv${p.level || 1})`;
-      this.ctx.strokeText(playerLabel, p.x, p.y - config.PLAYER_SIZE - 15);
-      this.ctx.fillText(playerLabel, p.x, p.y - config.PLAYER_SIZE - 15);
+      // Player name bubble with nickname
+      const nickname = p.nickname || (isCurrentPlayer ? 'Vous' : 'Joueur');
+      const playerLabel = `${nickname} (Lv${p.level || 1})`;
+      this.renderPlayerNameBubble(p.x, p.y, playerLabel, isCurrentPlayer, -config.PLAYER_SIZE - 25);
 
       // Health bar
       const healthPercent = p.health / p.maxHealth;
@@ -945,11 +1384,65 @@ class Renderer {
     });
   }
 
+  renderTargetIndicator(player) {
+    // Only render if mobile controls are active and auto-shoot is on
+    if (!window.mobileControls || !window.mobileControls.autoShootActive) return;
+
+    const target = window.mobileControls.getCurrentTarget();
+    if (!target || !player) return;
+
+    // Draw line from player to target
+    this.ctx.save();
+    this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.4)';
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([10, 5]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(player.x, player.y);
+    this.ctx.lineTo(target.x, target.y);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+
+    // Draw target reticle
+    const reticleSize = 30;
+    this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+    this.ctx.lineWidth = 3;
+
+    // Crosshair
+    this.ctx.beginPath();
+    this.ctx.moveTo(target.x - reticleSize, target.y);
+    this.ctx.lineTo(target.x + reticleSize, target.y);
+    this.ctx.moveTo(target.x, target.y - reticleSize);
+    this.ctx.lineTo(target.x, target.y + reticleSize);
+    this.ctx.stroke();
+
+    // Circle around target
+    this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath();
+    this.ctx.arc(target.x, target.y, reticleSize - 5, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    // Pulsing effect
+    const pulse = Math.sin(Date.now() / 200) * 5;
+    this.ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.arc(target.x, target.y, reticleSize + pulse, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    this.ctx.restore();
+  }
+
   renderMinimap(gameState, playerId) {
     if (!gameState.config.ROOM_WIDTH) return;
 
-    const mapWidth = this.minimapCanvas.width;
-    const mapHeight = this.minimapCanvas.height;
+    // Scale context for Retina displays
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.minimapCtx.save();
+    this.minimapCtx.scale(pixelRatio, pixelRatio);
+
+    const mapWidth = this.minimapCanvas.width / pixelRatio;
+    const mapHeight = this.minimapCanvas.height / pixelRatio;
     const scaleX = mapWidth / gameState.config.ROOM_WIDTH;
     const scaleY = mapHeight / gameState.config.ROOM_HEIGHT;
 
@@ -1025,6 +1518,8 @@ class Renderer {
     this.minimapCtx.strokeStyle = '#00ff00';
     this.minimapCtx.lineWidth = 2;
     this.minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
+
+    this.minimapCtx.restore(); // Restore pixelRatio scaling
   }
 }
 
@@ -1036,19 +1531,35 @@ class UIManager {
   constructor(gameState) {
     this.gameState = gameState;
     this.shopOpen = false;
+
+    // Store handler references for cleanup
+    this.handlers = {
+      shopClose: () => this.hideShop()
+    };
+
+    this.shopCloseBtn = document.getElementById('shop-close-btn');
     this.setupEventListeners();
   }
 
   setupEventListeners() {
     // Shop close button
-    document.getElementById('shop-close-btn').addEventListener('click', () => {
-      this.hideShop();
-    });
+    if (this.shopCloseBtn) {
+      this.shopCloseBtn.addEventListener('click', this.handlers.shopClose);
+    }
 
     // Make buyItem global for onclick handlers
     window.buyItem = (itemId, category) => {
-      networkManager.buyItem(itemId, category);
+      if (window.networkManager) {
+        window.networkManager.buyItem(itemId, category);
+      }
     };
+  }
+
+  cleanup() {
+    // Remove shop close button listener
+    if (this.shopCloseBtn) {
+      this.shopCloseBtn.removeEventListener('click', this.handlers.shopClose);
+    }
   }
 
   update() {
@@ -1168,7 +1679,9 @@ class UIManager {
       `;
 
       card.addEventListener('click', () => {
-        networkManager.selectUpgrade(upgrade.id);
+        if (window.networkManager) {
+          window.networkManager.selectUpgrade(upgrade.id);
+        }
         levelUpScreen.style.display = 'none';
       });
 
@@ -1394,23 +1907,57 @@ class NicknameManager {
     this.nicknameInput = document.getElementById('nickname-input');
     this.startGameBtn = document.getElementById('start-game-btn');
     this.nicknameScreen = document.getElementById('nickname-screen');
+    this.respawnBtn = document.getElementById('respawn-btn');
+
+    this.spawnProtectionInterval = null; // Store interval for cleanup
+
+    // Store handler references for cleanup
+    this.handlers = {
+      keypress: (e) => {
+        if (e.key === 'Enter') {
+          this.startGame();
+        }
+      },
+      startGame: () => this.startGame(),
+      respawn: () => this.respawn()
+    };
+
     this.setupEventListeners();
   }
 
   setupEventListeners() {
-    this.nicknameInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.startGame();
-      }
-    });
+    if (this.nicknameInput) {
+      this.nicknameInput.addEventListener('keypress', this.handlers.keypress);
+    }
 
-    this.startGameBtn.addEventListener('click', () => {
-      this.startGame();
-    });
+    if (this.startGameBtn) {
+      this.startGameBtn.addEventListener('click', this.handlers.startGame);
+    }
 
-    document.getElementById('respawn-btn').addEventListener('click', () => {
-      this.respawn();
-    });
+    if (this.respawnBtn) {
+      this.respawnBtn.addEventListener('click', this.handlers.respawn);
+    }
+  }
+
+  cleanup() {
+    // Clear spawn protection interval
+    if (this.spawnProtectionInterval) {
+      clearInterval(this.spawnProtectionInterval);
+      this.spawnProtectionInterval = null;
+    }
+
+    // Remove event listeners
+    if (this.nicknameInput) {
+      this.nicknameInput.removeEventListener('keypress', this.handlers.keypress);
+    }
+
+    if (this.startGameBtn) {
+      this.startGameBtn.removeEventListener('click', this.handlers.startGame);
+    }
+
+    if (this.respawnBtn) {
+      this.respawnBtn.removeEventListener('click', this.handlers.respawn);
+    }
   }
 
   startGame() {
@@ -1426,6 +1973,13 @@ class NicknameManager {
       return;
     }
 
+    // Validate nickname format (alphanumeric, spaces, underscores, hyphens only)
+    const nicknameRegex = /^[\w\s-]+$/u;
+    if (!nicknameRegex.test(nickname)) {
+      alert('Votre pseudo ne peut contenir que des lettres, chiffres, espaces, tirets et underscores !');
+      return;
+    }
+
     // Hide nickname screen
     this.nicknameScreen.style.display = 'none';
 
@@ -1433,7 +1987,10 @@ class NicknameManager {
     this.playerController.setNickname(nickname);
 
     // Display player name
-    document.getElementById('player-name-display').textContent = `🎮 ${nickname}`;
+    const playerNameDisplay = document.getElementById('player-name-display');
+    if (playerNameDisplay) {
+      playerNameDisplay.textContent = `🎮 ${nickname}`;
+    }
 
     // Show spawn protection
     this.showSpawnProtection();
@@ -1443,29 +2000,47 @@ class NicknameManager {
     const protectionDiv = document.getElementById('spawn-protection');
     const timerSpan = document.getElementById('protection-timer');
 
+    if (!protectionDiv || !timerSpan) return; // Guard against missing elements
+
     protectionDiv.style.display = 'block';
 
-    const interval = setInterval(() => {
+    // Clear previous interval if exists
+    if (this.spawnProtectionInterval) {
+      clearInterval(this.spawnProtectionInterval);
+    }
+
+    this.spawnProtectionInterval = setInterval(() => {
       const remaining = Math.ceil((this.playerController.spawnProtectionEndTime - Date.now()) / 1000);
 
       if (remaining <= 0) {
-        protectionDiv.style.display = 'none';
-        clearInterval(interval);
-        networkManager.endSpawnProtection();
+        if (protectionDiv) protectionDiv.style.display = 'none';
+        clearInterval(this.spawnProtectionInterval);
+        this.spawnProtectionInterval = null;
+        if (window.networkManager) {
+          window.networkManager.endSpawnProtection();
+        }
       } else {
-        timerSpan.textContent = remaining;
+        if (timerSpan) timerSpan.textContent = remaining;
       }
     }, CONSTANTS.SPAWN_PROTECTION.UPDATE_INTERVAL);
   }
 
   respawn() {
     this.playerController.respawn();
-    document.getElementById('game-over').style.display = 'none';
+
+    const gameOverScreen = document.getElementById('game-over');
+    if (gameOverScreen) {
+      gameOverScreen.style.display = 'none';
+    }
 
     // Show nickname screen again
-    this.nicknameInput.value = '';
-    this.nicknameScreen.style.display = 'flex';
-    this.nicknameInput.focus();
+    if (this.nicknameInput) {
+      this.nicknameInput.value = '';
+      this.nicknameInput.focus();
+    }
+    if (this.nicknameScreen) {
+      this.nicknameScreen.style.display = 'flex';
+    }
   }
 }
 
@@ -1475,9 +2050,21 @@ class NicknameManager {
 
 class GameEngine {
   constructor() {
+    // Store handler references for cleanup
+    this.handlers = {
+      resize: () => this.resizeCanvas(),
+      mousemove: null,
+      click: null
+    };
+
+    this.animationFrameId = null; // Store requestAnimationFrame ID for cleanup
+
     this.setupCanvas();
     this.initializeManagers();
     this.start();
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => this.cleanup());
   }
 
   setupCanvas() {
@@ -1488,12 +2075,34 @@ class GameEngine {
 
     // Resize canvas
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    window.addEventListener('resize', this.handlers.resize);
+
+    // Handle orientation changes on mobile
+    window.addEventListener('orientationchange', this.handlers.resize);
   }
 
   resizeCanvas() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    // Set display size (CSS pixels)
+    this.canvas.style.width = window.innerWidth + 'px';
+    this.canvas.style.height = window.innerHeight + 'px';
+
+    // Set actual size in memory (scaled for Retina/high-DPI displays)
+    this.canvas.width = window.innerWidth * pixelRatio;
+    this.canvas.height = window.innerHeight * pixelRatio;
+
+    // Note: Pixel ratio scaling is applied in the render() method to avoid accumulation
+
+    // Also resize minimap canvas for Retina displays (only if renderer exists)
+    if (this.renderer && this.renderer.minimapCanvas) {
+      const minimapSize = 200;
+      this.renderer.minimapCanvas.style.width = minimapSize + 'px';
+      this.renderer.minimapCanvas.style.height = minimapSize + 'px';
+      this.renderer.minimapCanvas.width = minimapSize * pixelRatio;
+      this.renderer.minimapCanvas.height = minimapSize * pixelRatio;
+      // Minimap scaling is handled in renderMinimap()
+    }
   }
 
   initializeManagers() {
@@ -1504,12 +2113,14 @@ class GameEngine {
     window.inputManager = new InputManager();
     const camera = new CameraManager();
     window.networkManager = new NetworkManager(io());
-    window.gameUI = new UIManager(gameState);
+    window.gameUI = new UIManager(window.gameState);
+    window.audioManager = new AudioManager(); // Audio feedback
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
-    inputManager.setMobileControls(this.mobileControls);
-    window.playerController = this.playerController = new PlayerController(inputManager, networkManager, gameState, camera);
+    window.mobileControls = this.mobileControls; // Make globally accessible
+    window.inputManager.setMobileControls(this.mobileControls);
+    window.playerController = this.playerController = new PlayerController(window.inputManager, window.networkManager, window.gameState, camera);
 
     this.renderer = new Renderer(this.canvas, this.ctx, this.minimapCanvas, this.minimapCtx);
     this.renderer.setCamera(camera);
@@ -1518,13 +2129,15 @@ class GameEngine {
 
     // Mouse events (only if not mobile)
     if (!this.mobileControls.isMobile) {
-      this.canvas.addEventListener('mousemove', (e) => {
-        inputManager.updateMouse(e.clientX, e.clientY);
-      });
-
-      this.canvas.addEventListener('click', () => {
+      this.handlers.mousemove = (e) => {
+        window.inputManager.updateMouse(e.clientX, e.clientY);
+      };
+      this.handlers.click = () => {
         this.playerController.shoot(this.canvas.width, this.canvas.height);
-      });
+      };
+
+      this.canvas.addEventListener('mousemove', this.handlers.mousemove);
+      this.canvas.addEventListener('click', this.handlers.click);
     }
   }
 
@@ -1533,18 +2146,60 @@ class GameEngine {
   }
 
   render() {
-    this.renderer.render(gameState, gameState.playerId);
+    this.renderer.render(window.gameState, window.gameState.playerId);
   }
 
   gameLoop() {
-    this.update();
-    this.render();
-    requestAnimationFrame(() => this.gameLoop());
+    try {
+      this.update();
+      this.render();
+    } catch (error) {
+      console.error('Game loop error:', error);
+      // Continue the game loop even if there's an error
+    }
+    this.animationFrameId = requestAnimationFrame(() => this.gameLoop());
   }
 
   start() {
     console.log('🎮 Zombie Survival - Game Engine Started');
     this.gameLoop();
+  }
+
+  cleanup() {
+    // Cancel animation frame to stop game loop
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    // Remove resize and orientation change event listeners
+    window.removeEventListener('resize', this.handlers.resize);
+    window.removeEventListener('orientationchange', this.handlers.resize);
+
+    // Remove mouse event listeners (if desktop)
+    if (this.handlers.mousemove) {
+      this.canvas.removeEventListener('mousemove', this.handlers.mousemove);
+    }
+    if (this.handlers.click) {
+      this.canvas.removeEventListener('click', this.handlers.click);
+    }
+
+    // Cleanup all managers
+    if (window.inputManager && typeof window.inputManager.cleanup === 'function') {
+      window.inputManager.cleanup();
+    }
+
+    if (window.gameUI && typeof window.gameUI.cleanup === 'function') {
+      window.gameUI.cleanup();
+    }
+
+    if (this.nicknameManager && typeof this.nicknameManager.cleanup === 'function') {
+      this.nicknameManager.cleanup();
+    }
+
+    if (this.mobileControls && typeof this.mobileControls.cleanup === 'function') {
+      this.mobileControls.cleanup();
+    }
   }
 }
 
