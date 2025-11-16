@@ -286,11 +286,12 @@ class NetworkManager {
    ============================================ */
 
 class PlayerController {
-  constructor(inputManager, networkManager, gameState, camera) {
+  constructor(inputManager, networkManager, gameState, camera, canvas) {
     this.input = inputManager;
     this.network = networkManager;
     this.gameState = gameState;
     this.camera = camera;
+    this.canvas = canvas;
     this.nickname = null;
     this.gameStarted = false;
     this.spawnProtectionEndTime = 0;
@@ -358,8 +359,8 @@ class PlayerController {
     if (!player || !player.alive || !this.gameStarted) return;
 
     const angle = Math.atan2(
-      this.input.mouse.y - canvas.height / 2,
-      this.input.mouse.x - canvas.width / 2
+      this.input.mouse.y - this.canvas.height / 2,
+      this.input.mouse.x - this.canvas.width / 2
     );
 
     this.network.shoot(angle);
@@ -475,6 +476,8 @@ class Renderer {
   }
 
   renderDoors(doors) {
+    if (!doors || !Array.isArray(doors)) return;
+
     doors.forEach(door => {
       this.ctx.fillStyle = door.active ? '#00ff00' : '#ff0000';
       this.ctx.fillRect(door.x, door.y, door.width, door.height);
@@ -1272,7 +1275,7 @@ class GameEngine {
     window.networkManager = new NetworkManager(io());
     window.gameUI = new UIManager(gameState);
 
-    this.playerController = new PlayerController(inputManager, networkManager, gameState, camera);
+    this.playerController = new PlayerController(inputManager, networkManager, gameState, camera, this.canvas);
     this.renderer = new Renderer(this.canvas, this.ctx, this.minimapCanvas, this.minimapCtx);
     this.renderer.setCamera(camera);
 
