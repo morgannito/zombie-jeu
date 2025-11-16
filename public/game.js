@@ -402,6 +402,12 @@ class Renderer {
   render(gameState, playerId) {
     this.clear();
 
+    // Wait for game initialization
+    if (!gameState.config || !playerId) {
+      this.renderWaitingMessage();
+      return;
+    }
+
     const player = gameState.state.players[playerId];
     if (!player) {
       this.renderWaitingMessage();
