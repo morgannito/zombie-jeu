@@ -856,8 +856,8 @@ class NetworkManager {
   }
 
   handleShopUpdate(data) {
-    if (data.success && gameUI.shopOpen) {
-      gameUI.populateShop();
+    if (data.success && window.gameUI && window.gameUI.shopOpen) {
+      window.gameUI.populateShop();
     }
   }
 
@@ -2084,14 +2084,14 @@ class GameEngine {
     window.inputManager = new InputManager();
     const camera = new CameraManager();
     window.networkManager = new NetworkManager(io());
-    window.gameUI = new UIManager(gameState);
+    window.gameUI = new UIManager(window.gameState);
     window.audioManager = new AudioManager(); // Audio feedback
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
     window.mobileControls = this.mobileControls; // Make globally accessible
-    inputManager.setMobileControls(this.mobileControls);
-    window.playerController = this.playerController = new PlayerController(inputManager, networkManager, gameState, camera);
+    window.inputManager.setMobileControls(this.mobileControls);
+    window.playerController = this.playerController = new PlayerController(window.inputManager, window.networkManager, window.gameState, camera);
 
     this.renderer = new Renderer(this.canvas, this.ctx, this.minimapCanvas, this.minimapCtx);
     this.renderer.setCamera(camera);
@@ -2101,7 +2101,7 @@ class GameEngine {
     // Mouse events (only if not mobile)
     if (!this.mobileControls.isMobile) {
       this.handlers.mousemove = (e) => {
-        inputManager.updateMouse(e.clientX, e.clientY);
+        window.inputManager.updateMouse(e.clientX, e.clientY);
       };
       this.handlers.click = () => {
         this.playerController.shoot(this.canvas.width, this.canvas.height);
@@ -2117,7 +2117,7 @@ class GameEngine {
   }
 
   render() {
-    this.renderer.render(gameState, gameState.playerId);
+    this.renderer.render(window.gameState, window.gameState.playerId);
   }
 
   gameLoop() {
