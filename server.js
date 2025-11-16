@@ -3,8 +3,10 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const path = require('path');
+const fs = require('fs');
 
 const PORT = process.env.PORT || 3000;
+const HIGHSCORE_FILE = path.join(__dirname, 'highscores.json');
 
 // Servir les fichiers statiques
 app.use(express.static('public'));
@@ -446,6 +448,92 @@ const SHOP_ITEMS = {
 function distance(x1, y1, x2, y2) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
+
+// ============================================
+//   SYSTÈME DE HIGHSCORES
+// ============================================
+
+// Charger les highscores depuis le fichier
+function loadHighscores() {
+  try {
+    if (fs.existsSync(HIGHSCORE_FILE)) {
+      const data = fs.readFileSync(HIGHSCORE_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Erreur lors du chargement des highscores:', error);
+  }
+
+  // Highscores par défaut
+  return {
+    bestWave: 1,
+    bestLevel: 1,
+    bestScore: 0,
+    mostGold: 0,
+    mostZombiesKilled: 0,
+    lastUpdated: Date.now()
+  };
+}
+
+// Sauvegarder les highscores dans le fichier
+function saveHighscores(highscores) {
+  try {
+    highscores.lastUpdated = Date.now();
+    fs.writeFileSync(HIGHSCORE_FILE, JSON.stringify(highscores, null, 2), 'utf8');
+    console.log('📊 Highscores sauvegardés:', highscores);
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde des highscores:', error);
+  }
+}
+
+// Mettre à jour les highscores avec les stats d'un joueur
+function updateHighscores(player, wave) {
+  const highscores = loadHighscores();
+  let updated = false;
+  const newRecords = [];
+
+  // Vérifier chaque record
+  if (wave > highscores.bestWave) {
+    highscores.bestWave = wave;
+    updated = true;
+    newRecords.push(`🌊 Meilleure Vague: ${wave}`);
+  }
+
+  if (player.level > highscores.bestLevel) {
+    highscores.bestLevel = player.level;
+    updated = true;
+    newRecords.push(`⭐ Meilleur Niveau: ${player.level}`);
+  }
+
+  if (player.score > highscores.bestScore) {
+    highscores.bestScore = player.score;
+    updated = true;
+    newRecords.push(`🏆 Meilleur Score: ${player.score}`);
+  }
+
+  if ((player.gold || 0) > highscores.mostGold) {
+    highscores.mostGold = player.gold || 0;
+    updated = true;
+    newRecords.push(`💰 Plus d'Or: ${player.gold}`);
+  }
+
+  const zombiesKilled = player.zombiesKilled || 0;
+  if (zombiesKilled > highscores.mostZombiesKilled) {
+    highscores.mostZombiesKilled = zombiesKilled;
+    updated = true;
+    newRecords.push(`💀 Plus de Zombies: ${zombiesKilled}`);
+  }
+
+  // Sauvegarder si un record a été battu
+  if (updated) {
+    saveHighscores(highscores);
+  }
+
+  return { updated, newRecords, highscores };
+}
+
+// Initialiser les highscores globaux
+let globalHighscores = loadHighscores();
 
 // Générer 3 choix d'upgrades aléatoires avec pondération par rareté
 function generateUpgradeChoices() {
@@ -1019,6 +1107,26 @@ function gameLoop() {
           if (player.health <= 0) {
             player.health = 0;
             player.alive = false;
+
+            // Mettre à jour les highscores quand le joueur meurt
+            const result = updateHighscores(player, gameState.wave);
+            if (result.updated) {
+              // Envoyer les nouveaux records au joueur
+              io.to(playerId).emit('newRecords', {
+                records: result.newRecords,
+                highscores: result.highscores
+              });
+            }
+
+            // Envoyer les stats finales au joueur
+            io.to(playerId).emit('gameOver', {
+              wave: gameState.wave,
+              level: player.level,
+              score: player.score,
+              gold: player.gold,
+              zombiesKilled: player.zombiesKilled || 0,
+              highscores: result.highscores
+            });
           }
         }
       }
@@ -1102,8 +1210,8 @@ function gameLoop() {
             createParticles(zombie.x, zombie.y, '#ff00ff', 30);
 
             // Infliger des dégâts à tous les joueurs dans le rayon
-            for (let playerId in gameState.players) {
-              const player = gameState.players[playerId];
+            for (let explPlayerId in gameState.players) {
+              const player = gameState.players[explPlayerId];
               // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
               if (player.alive && player.hasNickname && !player.spawnProtection) {
                 const dist = distance(zombie.x, zombie.y, player.x, player.y);
@@ -1112,6 +1220,26 @@ function gameLoop() {
                   if (player.health <= 0) {
                     player.health = 0;
                     player.alive = false;
+
+                    // Mettre à jour les highscores quand le joueur meurt
+                    const result = updateHighscores(player, gameState.wave);
+                    if (result.updated) {
+                      // Envoyer les nouveaux records au joueur
+                      io.to(explPlayerId).emit('newRecords', {
+                        records: result.newRecords,
+                        highscores: result.highscores
+                      });
+                    }
+
+                    // Envoyer les stats finales au joueur
+                    io.to(explPlayerId).emit('gameOver', {
+                      wave: gameState.wave,
+                      level: player.level,
+                      score: player.score,
+                      gold: player.gold,
+                      zombiesKilled: player.zombiesKilled || 0,
+                      highscores: result.highscores
+                    });
                   }
                 }
               }
@@ -1120,6 +1248,13 @@ function gameLoop() {
 
           // Créer du loot
           createLoot(zombie.x, zombie.y, zombie.goldDrop, zombie.xpDrop);
+
+          // Tracker le kill pour le joueur qui a tiré
+          if (bullet.playerId && gameState.players[bullet.playerId]) {
+            const shooter = gameState.players[bullet.playerId];
+            shooter.zombiesKilled = (shooter.zombiesKilled || 0) + 1;
+            shooter.score += zombie.goldDrop * 10; // Score = or × 10
+          }
 
           // Supprimer le zombie
           delete gameState.zombies[zombieId];
@@ -1358,6 +1493,7 @@ io.on('connection', (socket) => {
     xp: 0,
     gold: 0,
     score: 0,
+    zombiesKilled: 0,
     alive: true,
     angle: 0,
     weapon: 'pistol',
@@ -1401,7 +1537,8 @@ io.on('connection', (socket) => {
     shopItems: SHOP_ITEMS,
     walls: gameState.walls,
     rooms: gameState.rooms.length,
-    currentRoom: gameState.currentRoom
+    currentRoom: gameState.currentRoom,
+    highscores: globalHighscores
   });
 
   // Mouvement du joueur (Rogue-like avec collision)

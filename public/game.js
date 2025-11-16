@@ -63,6 +63,13 @@ class GameStateManager {
     this.powerupTypes = {};
     this.zombieTypes = {};
     this.shopItems = {};
+    this.highscores = {
+      bestWave: 1,
+      bestLevel: 1,
+      bestScore: 0,
+      mostGold: 0,
+      mostZombiesKilled: 0
+    };
   }
 
   updateState(newState) {
@@ -80,7 +87,11 @@ class GameStateManager {
     this.powerupTypes = data.powerupTypes;
     this.zombieTypes = data.zombieTypes;
     this.shopItems = data.shopItems;
+    if (data.highscores) {
+      this.highscores = data.highscores;
+    }
     console.log('🎮 Game initialized! Player ID:', this.playerId);
+    console.log('🏆 Highscores:', this.highscores);
   }
 }
 
@@ -184,6 +195,8 @@ class NetworkManager {
     this.socket.on('runCompleted', (data) => this.handleRunCompleted(data));
     this.socket.on('upgradeSelected', (data) => this.handleUpgradeSelected(data));
     this.socket.on('shopUpdate', (data) => this.handleShopUpdate(data));
+    this.socket.on('gameOver', (data) => this.handleGameOver(data));
+    this.socket.on('newRecords', (data) => this.handleNewRecords(data));
   }
 
   handleInit(data) {
@@ -248,6 +261,24 @@ class NetworkManager {
   handleShopUpdate(data) {
     if (data.success && gameUI.shopOpen) {
       gameUI.populateShop();
+    }
+  }
+
+  handleGameOver(data) {
+    console.log('💀 Game Over! Stats:', data);
+    gameUI.showGameOver(data);
+    // Mettre à jour les highscores locaux
+    if (data.highscores) {
+      gameState.highscores = data.highscores;
+    }
+  }
+
+  handleNewRecords(data) {
+    console.log('🏆 Nouveaux Records!', data.records);
+    gameUI.showNewRecords(data.records);
+    // Mettre à jour les highscores locaux
+    if (data.highscores) {
+      gameState.highscores = data.highscores;
     }
   }
 
@@ -1150,6 +1181,60 @@ class UIManager {
     }
 
     container.innerHTML = hasUpgrades ? html : '<div class="no-upgrades">Aucun upgrade permanent acheté</div>';
+  }
+
+  showGameOver(data) {
+    // Afficher l'écran de game over
+    const gameOverDiv = document.getElementById('game-over');
+    gameOverDiv.style.display = 'block';
+
+    // Stats de la partie
+    document.getElementById('final-score').textContent = data.score;
+    document.getElementById('final-wave').textContent = data.wave;
+
+    // Créer ou mettre à jour les stats détaillées
+    let detailedStats = document.getElementById('detailed-stats');
+    if (!detailedStats) {
+      detailedStats = document.createElement('div');
+      detailedStats.id = 'detailed-stats';
+      gameOverDiv.appendChild(detailedStats);
+    }
+
+    detailedStats.innerHTML = `
+      <div style="margin: 20px 0; text-align: left; background: rgba(0,0,0,0.5); padding: 15px; border-radius: 8px;">
+        <h3 style="color: #ffd700; margin-bottom: 10px;">📊 Statistiques de la Partie</h3>
+        <p>🌊 Vague atteinte: <strong>${data.wave}</strong></p>
+        <p>⭐ Niveau atteint: <strong>${data.level}</strong></p>
+        <p>🏆 Score: <strong>${data.score}</strong></p>
+        <p>💰 Or collecté: <strong>${data.gold}</strong></p>
+        <p>💀 Zombies tués: <strong>${data.zombiesKilled}</strong></p>
+        <hr style="margin: 15px 0; border-color: rgba(255,255,255,0.2);">
+        <h3 style="color: #ffd700; margin-bottom: 10px;">🏆 Meilleurs Scores</h3>
+        <p>🌊 Meilleure Vague: <strong style="color: ${data.wave >= data.highscores.bestWave ? '#00ff00' : '#fff'}">${data.highscores.bestWave}</strong></p>
+        <p>⭐ Meilleur Niveau: <strong style="color: ${data.level >= data.highscores.bestLevel ? '#00ff00' : '#fff'}">${data.highscores.bestLevel}</strong></p>
+        <p>🏆 Meilleur Score: <strong style="color: ${data.score >= data.highscores.bestScore ? '#00ff00' : '#fff'}">${data.highscores.bestScore}</strong></p>
+        <p>💰 Plus d'Or: <strong style="color: ${data.gold >= data.highscores.mostGold ? '#00ff00' : '#fff'}">${data.highscores.mostGold}</strong></p>
+        <p>💀 Plus de Zombies: <strong style="color: ${data.zombiesKilled >= data.highscores.mostZombiesKilled ? '#00ff00' : '#fff'}">${data.highscores.mostZombiesKilled}</strong></p>
+      </div>
+    `;
+  }
+
+  showNewRecords(records) {
+    // Afficher une notification pour les nouveaux records
+    const announcement = document.getElementById('wave-announcement');
+    announcement.querySelector('h1').innerHTML = '🏆 NOUVEAU RECORD !';
+    announcement.querySelector('p').innerHTML = records.join('<br>');
+    announcement.style.background = 'linear-gradient(135deg, rgba(255, 215, 0, 0.95) 0%, rgba(255, 140, 0, 0.95) 100%)';
+    announcement.style.border = '4px solid #FFD700';
+    announcement.style.boxShadow = '0 0 30px rgba(255, 215, 0, 0.8)';
+    announcement.style.display = 'block';
+
+    setTimeout(() => {
+      announcement.style.display = 'none';
+      announcement.style.background = 'rgba(255, 170, 0, 0.9)';
+      announcement.style.border = 'none';
+      announcement.style.boxShadow = 'none';
+    }, 4000);
   }
 }
 
