@@ -1119,7 +1119,6 @@ body {
   #minimap {
     width: 100px;
     height: 100px;
-    top: auto;
     bottom: auto;
     left: auto;
     right: 0.5rem;

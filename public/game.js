@@ -188,6 +188,8 @@ class MobileControlsManager {
     const mobileControls = document.getElementById('mobile-controls');
     if (mobileControls) {
       mobileControls.style.display = 'block';
+    } else {
+      console.warn('Mobile controls: Container element not found');
     }
 
     // Hide instructions on mobile
@@ -201,7 +203,10 @@ class MobileControlsManager {
     const joystickBase = document.getElementById('joystick-base');
     const joystickStick = document.getElementById('joystick-stick');
 
-    if (!joystickBase || !joystickStick) return;
+    if (!joystickBase || !joystickStick) {
+      console.warn('Mobile controls: Joystick elements not found');
+      return;
+    }
 
     let touchId = null;
     const maxDistance = 45; // Maximum distance the stick can move from center
@@ -269,7 +274,10 @@ class MobileControlsManager {
 
   setupAutoShoot() {
     const autoShootBtn = document.getElementById('auto-shoot-btn');
-    if (!autoShootBtn) return;
+    if (!autoShootBtn) {
+      console.warn('Mobile controls: Auto-shoot button not found');
+      return;
+    }
 
     autoShootBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -293,19 +301,22 @@ class MobileControlsManager {
   startAutoShoot() {
     // Auto shoot every 100ms when active (server will handle fire rate limiting)
     this.autoShootInterval = setInterval(() => {
-      if (this.autoShootActive && window.playerController) {
-        const player = gameState.getPlayer();
-        if (player && player.alive) {
-          // Find nearest zombie and shoot at it
-          const nearestZombie = this.findNearestZombie(player);
-          if (nearestZombie) {
-            const angle = Math.atan2(
-              nearestZombie.y - player.y,
-              nearestZombie.x - player.x
-            );
-            networkManager.shoot(angle);
-          }
-        }
+      if (!this.autoShootActive) return;
+
+      // Verify all required objects exist
+      if (!window.gameState || !window.networkManager || !window.playerController) return;
+
+      const player = window.gameState.getPlayer();
+      if (!player || !player.alive || !playerController.gameStarted) return;
+
+      // Find nearest zombie and shoot at it
+      const nearestZombie = this.findNearestZombie(player);
+      if (nearestZombie) {
+        const angle = Math.atan2(
+          nearestZombie.y - player.y,
+          nearestZombie.x - player.x
+        );
+        window.networkManager.shoot(angle);
       }
     }, 100);
   }
@@ -318,7 +329,11 @@ class MobileControlsManager {
   }
 
   findNearestZombie(player) {
-    const zombies = Object.values(gameState.state.zombies);
+    if (!window.gameState || !window.gameState.state || !window.gameState.state.zombies) {
+      return null;
+    }
+
+    const zombies = Object.values(window.gameState.state.zombies);
     if (zombies.length === 0) return null;
 
     let nearestZombie = null;
