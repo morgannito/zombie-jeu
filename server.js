@@ -45,15 +45,15 @@ const CONFIG = {
   PLAYER_SPEED: 8, // Vitesse augmentée pour la grande map
   PLAYER_SIZE: 20,
   ZOMBIE_SIZE: 25,
-  ZOMBIE_SPAWN_INTERVAL: 2000, // Spawns plus rapides pour remplir la map
-  MAX_ZOMBIES: 35, // Plus de zombies simultanés (15 -> 35)
+  ZOMBIE_SPAWN_INTERVAL: 1000, // Spawns 2x plus rapides (2000 -> 1000ms)
+  MAX_ZOMBIES: 50, // Beaucoup plus de zombies simultanés (35 -> 50)
   BULLET_SPEED: 10,
   BULLET_DAMAGE: 34,
   BULLET_SIZE: 5,
   PLAYER_MAX_HEALTH: 100,
   POWERUP_SPAWN_INTERVAL: 15000,
   POWERUP_SIZE: 15,
-  ZOMBIES_PER_ROOM: 20, // Plus de zombies pour remplir la grande map (8 -> 20)
+  ZOMBIES_PER_ROOM: 25, // Plus de zombies pour augmenter la difficulté (20 -> 25)
   LOOT_SIZE: 10,
   DOOR_WIDTH: 120, // Porte plus large
   ROOMS_PER_RUN: 3
@@ -336,6 +336,18 @@ const LEVEL_UP_UPGRADES = {
     effect: (player) => {
       player.health = player.maxHealth;
     }
+  },
+  autoTurret: {
+    id: 'autoTurret',
+    name: '🎯 Tourelle Automatique',
+    description: 'Tire automatiquement sur les zombies proches',
+    rarity: 'legendary',
+    effect: (player) => {
+      player.autoTurrets = (player.autoTurrets || 0) + 1;
+      if (!player.lastAutoShot) {
+        player.lastAutoShot = Date.now();
+      }
+    }
   }
 };
 
@@ -605,23 +617,23 @@ function getXPForLevel(level) {
   }
 }
 
-// Spawn des zombies (MODE INFINI avec vagues)
-function spawnZombie() {
-  if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) {
-    return;
+// Calculer le nombre de zombies à spawner par batch selon la vague
+function getZombiesPerBatch() {
+  if (gameState.wave <= 2) {
+    return 2; // Vagues 1-2 : 2 zombies à la fois
+  } else if (gameState.wave <= 5) {
+    return 3; // Vagues 3-5 : 3 zombies à la fois
+  } else if (gameState.wave <= 8) {
+    return 5; // Vagues 6-8 : 5 zombies à la fois
+  } else if (gameState.wave <= 12) {
+    return 7; // Vagues 9-12 : 7 zombies à la fois
+  } else {
+    return 10; // Vagues 13+ : 10 zombies à la fois (CHAOS!)
   }
+}
 
-  // Limiter le spawn selon la vague actuelle
-  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 3; // +3 zombies par vague
-
-  if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
-    // Spawner le boss si pas encore fait
-    if (!gameState.bossSpawned && Object.keys(gameState.zombies).length === 0) {
-      spawnBoss();
-    }
-    return;
-  }
-
+// Spawner un seul zombie (fonction utilitaire)
+function spawnSingleZombie() {
   // Position aléatoire dans la salle (éviter les murs)
   let x, y;
   let attempts = 0;
@@ -631,33 +643,88 @@ function spawnZombie() {
     attempts++;
   } while (checkWallCollision(x, y, CONFIG.ZOMBIE_SIZE) && attempts < 50);
 
-  if (attempts >= 50) return; // Pas de place disponible
+  if (attempts >= 50) return false; // Pas de place disponible
 
-  // Choisir un type de zombie aléatoirement avec pondération
-  const types = ['normal', 'normal', 'normal', 'fast', 'fast', 'tank', 'explosive', 'healer', 'slower'];
+  // Choisir un type de zombie avec pondération progressive selon la vague
+  // Plus la vague est élevée, plus les zombies dangereux sont fréquents
+  let types;
+  if (gameState.wave <= 3) {
+    // Vagues 1-3 : Principalement des zombies normaux
+    types = ['normal', 'normal', 'normal', 'normal', 'fast', 'fast', 'tank'];
+  } else if (gameState.wave <= 6) {
+    // Vagues 4-6 : Mélange équilibré
+    types = ['normal', 'normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'healer', 'slower'];
+  } else if (gameState.wave <= 10) {
+    // Vagues 7-10 : Plus de zombies spéciaux
+    types = ['normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'slower', 'slower'];
+  } else {
+    // Vague 11+ : Chaos total - Beaucoup de zombies dangereux
+    types = ['fast', 'fast', 'tank', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'healer', 'slower', 'slower'];
+  }
   const typeKey = types[Math.floor(Math.random() * types.length)];
   const type = ZOMBIE_TYPES[typeKey];
 
   const zombieId = gameState.nextZombieId++;
+
+  // Les zombies deviennent progressivement plus forts avec les vagues
+  const waveMultiplier = 1 + (gameState.wave - 1) * 0.08; // +8% par vague
+  const zombieHealth = Math.floor(type.health * waveMultiplier);
+  const zombieDamage = Math.floor(type.damage * waveMultiplier);
+  const zombieSpeed = Math.min(type.speed * (1 + (gameState.wave - 1) * 0.03), type.speed * 1.5); // +3% vitesse par vague, max +50%
+  const zombieGold = Math.floor(type.goldDrop * waveMultiplier);
+  const zombieXP = Math.floor(type.xpDrop * waveMultiplier);
 
   gameState.zombies[zombieId] = {
     id: zombieId,
     type: typeKey,
     x: x,
     y: y,
-    health: type.health,
-    maxHealth: type.health,
-    speed: type.speed,
-    damage: type.damage,
+    health: zombieHealth,
+    maxHealth: zombieHealth,
+    speed: zombieSpeed,
+    damage: zombieDamage,
     color: type.color,
     size: type.size,
-    goldDrop: type.goldDrop,
-    xpDrop: type.xpDrop,
+    goldDrop: zombieGold,
+    xpDrop: zombieXP,
     // Attributs spéciaux
     lastHeal: typeKey === 'healer' ? Date.now() : null
   };
 
   gameState.zombiesSpawnedThisWave++;
+  return true;
+}
+
+// Spawn des zombies en groupes (MODE INFINI avec vagues)
+function spawnZombie() {
+  if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) {
+    return;
+  }
+
+  // Limiter le spawn selon la vague actuelle - Progression agressive
+  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 5; // +5 zombies par vague (difficulté croissante)
+
+  if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
+    // Spawner le boss si pas encore fait
+    if (!gameState.bossSpawned && Object.keys(gameState.zombies).length === 0) {
+      spawnBoss();
+    }
+    return;
+  }
+
+  // Spawner plusieurs zombies à la fois (batch spawning)
+  const batchSize = getZombiesPerBatch();
+  let spawned = 0;
+
+  for (let i = 0; i < batchSize; i++) {
+    // Vérifier si on a atteint les limites
+    if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) break;
+    if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) break;
+
+    if (spawnSingleZombie()) {
+      spawned++;
+    }
+  }
 }
 
 // Spawner un boss zombie (MODE INFINI - difficulté croissante)
@@ -791,6 +858,61 @@ function gameLoop() {
       if (!player.lastRegenTick || now - player.lastRegenTick >= 1000) {
         player.health = Math.min(player.health + player.regeneration, player.maxHealth);
         player.lastRegenTick = now;
+      }
+    }
+
+    // Tourelles automatiques
+    if (player.autoTurrets > 0 && player.hasNickname && !player.spawnProtection) {
+      // Cooldown : 600ms par tourelle (plus on a de tourelles, plus on tire vite)
+      const autoFireCooldown = 600 / player.autoTurrets;
+
+      if (now - player.lastAutoShot >= autoFireCooldown) {
+        // Trouver le zombie le plus proche
+        let closestZombie = null;
+        let closestDistance = Infinity;
+        const autoTurretRange = 500; // Portée de 500 pixels
+
+        for (let zombieId in gameState.zombies) {
+          const zombie = gameState.zombies[zombieId];
+          const dist = distance(player.x, player.y, zombie.x, zombie.y);
+
+          if (dist < closestDistance && dist <= autoTurretRange) {
+            closestDistance = dist;
+            closestZombie = zombie;
+          }
+        }
+
+        // Tirer sur le zombie le plus proche
+        if (closestZombie) {
+          const angle = Math.atan2(closestZombie.y - player.y, closestZombie.x - player.x);
+          const bulletId = gameState.nextBulletId++;
+
+          // Les tourelles font 60% des dégâts normaux
+          const baseDamage = CONFIG.BULLET_DAMAGE * 0.6;
+          const damage = baseDamage * (player.damageMultiplier || 1);
+
+          gameState.bullets[bulletId] = {
+            id: bulletId,
+            x: player.x,
+            y: player.y,
+            vx: Math.cos(angle) * CONFIG.BULLET_SPEED,
+            vy: Math.sin(angle) * CONFIG.BULLET_SPEED,
+            playerId: playerId,
+            damage: damage,
+            color: '#00ffaa', // Couleur spéciale pour les tourelles
+            piercing: 0,
+            piercedZombies: [],
+            explosiveRounds: false,
+            explosionRadius: 0,
+            explosionDamagePercent: 0,
+            isAutoTurret: true
+          };
+
+          player.lastAutoShot = now;
+
+          // Créer des particules pour indiquer le tir
+          createParticles(player.x, player.y, '#00ffaa', 3);
+        }
       }
     }
   }
@@ -1012,10 +1134,13 @@ function gameLoop() {
             gameState.zombiesKilledThisWave = 0;
             gameState.zombiesSpawnedThisWave = 0;
 
+            // Accélérer le spawn pour la nouvelle vague
+            restartZombieSpawner();
+
             // Notifier tous les joueurs de la nouvelle vague
             io.emit('newWave', {
               wave: gameState.wave,
-              zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 3
+              zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 5 // Mis à jour pour correspondre à la nouvelle progression
             });
 
             // Bonus de santé pour les joueurs survivants
@@ -1168,8 +1293,29 @@ function gameLoop() {
   }
 }
 
-// Spawn automatique des zombies
-setInterval(spawnZombie, CONFIG.ZOMBIE_SPAWN_INTERVAL);
+// Spawn automatique des zombies avec accélération progressive
+// L'intervalle de spawn diminue avec les vagues pour augmenter la difficulté
+function getSpawnInterval() {
+  // Commence à 1000ms, diminue de 50ms par vague jusqu'à un minimum de 400ms
+  const baseInterval = CONFIG.ZOMBIE_SPAWN_INTERVAL;
+  const reduction = Math.min((gameState.wave - 1) * 50, 600); // Max 600ms de réduction
+  return Math.max(baseInterval - reduction, 400); // Minimum 400ms entre les spawns
+}
+
+let zombieSpawnTimer;
+function startZombieSpawner() {
+  if (zombieSpawnTimer) {
+    clearInterval(zombieSpawnTimer);
+  }
+  zombieSpawnTimer = setInterval(spawnZombie, getSpawnInterval());
+}
+
+// Relancer le timer quand une nouvelle vague commence pour ajuster la vitesse
+function restartZombieSpawner() {
+  startZombieSpawner();
+}
+
+startZombieSpawner();
 
 // Spawn automatique des power-ups
 setInterval(spawnPowerup, CONFIG.POWERUP_SPAWN_INTERVAL);
@@ -1240,7 +1386,9 @@ io.on('connection', (socket) => {
     explosionDamagePercent: 0,
     extraBullets: 0,
     thorns: 0,
-    lastRegenTick: Date.now()
+    lastRegenTick: Date.now(),
+    autoTurrets: 0,
+    lastAutoShot: Date.now()
   };
 
   // Envoyer la configuration au client
