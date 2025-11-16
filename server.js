@@ -336,6 +336,18 @@ const LEVEL_UP_UPGRADES = {
     effect: (player) => {
       player.health = player.maxHealth;
     }
+  },
+  autoTurret: {
+    id: 'autoTurret',
+    name: '🎯 Tourelle Automatique',
+    description: 'Tire automatiquement sur les zombies proches',
+    rarity: 'legendary',
+    effect: (player) => {
+      player.autoTurrets = (player.autoTurrets || 0) + 1;
+      if (!player.lastAutoShot) {
+        player.lastAutoShot = Date.now();
+      }
+    }
   }
 };
 
@@ -848,6 +860,61 @@ function gameLoop() {
         player.lastRegenTick = now;
       }
     }
+
+    // Tourelles automatiques
+    if (player.autoTurrets > 0 && player.hasNickname && !player.spawnProtection) {
+      // Cooldown : 600ms par tourelle (plus on a de tourelles, plus on tire vite)
+      const autoFireCooldown = 600 / player.autoTurrets;
+
+      if (now - player.lastAutoShot >= autoFireCooldown) {
+        // Trouver le zombie le plus proche
+        let closestZombie = null;
+        let closestDistance = Infinity;
+        const autoTurretRange = 500; // Portée de 500 pixels
+
+        for (let zombieId in gameState.zombies) {
+          const zombie = gameState.zombies[zombieId];
+          const dist = distance(player.x, player.y, zombie.x, zombie.y);
+
+          if (dist < closestDistance && dist <= autoTurretRange) {
+            closestDistance = dist;
+            closestZombie = zombie;
+          }
+        }
+
+        // Tirer sur le zombie le plus proche
+        if (closestZombie) {
+          const angle = Math.atan2(closestZombie.y - player.y, closestZombie.x - player.x);
+          const bulletId = gameState.nextBulletId++;
+
+          // Les tourelles font 60% des dégâts normaux
+          const baseDamage = CONFIG.BULLET_DAMAGE * 0.6;
+          const damage = baseDamage * (player.damageMultiplier || 1);
+
+          gameState.bullets[bulletId] = {
+            id: bulletId,
+            x: player.x,
+            y: player.y,
+            vx: Math.cos(angle) * CONFIG.BULLET_SPEED,
+            vy: Math.sin(angle) * CONFIG.BULLET_SPEED,
+            playerId: playerId,
+            damage: damage,
+            color: '#00ffaa', // Couleur spéciale pour les tourelles
+            piercing: 0,
+            piercedZombies: [],
+            explosiveRounds: false,
+            explosionRadius: 0,
+            explosionDamagePercent: 0,
+            isAutoTurret: true
+          };
+
+          player.lastAutoShot = now;
+
+          // Créer des particules pour indiquer le tir
+          createParticles(player.x, player.y, '#00ffaa', 3);
+        }
+      }
+    }
   }
 
   // Mise à jour des zombies - ils chassent le joueur le plus proche
@@ -1319,7 +1386,9 @@ io.on('connection', (socket) => {
     explosionDamagePercent: 0,
     extraBullets: 0,
     thorns: 0,
-    lastRegenTick: Date.now()
+    lastRegenTick: Date.now(),
+    autoTurrets: 0,
+    lastAutoShot: Date.now()
   };
 
   // Envoyer la configuration au client
