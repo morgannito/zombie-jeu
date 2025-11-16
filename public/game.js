@@ -316,6 +316,8 @@ class MobileControlsManager {
           nearestZombie.y - player.y,
           nearestZombie.x - player.x
         );
+        // Mettre à jour l'angle visuel du canon
+        player.angle = angle;
         window.networkManager.shoot(angle);
       }
     }, 100);
@@ -560,10 +562,17 @@ class PlayerController {
       const newY = player.y + dy * speed;
 
       // Calculate aim angle
-      const angle = Math.atan2(
-        this.input.mouse.y - canvasHeight / 2,
-        this.input.mouse.x - canvasWidth / 2
-      );
+      let angle;
+      // Sur mobile, orienter le canon dans la direction du mouvement du joystick
+      if (this.input.mobileControls && this.input.mobileControls.isActive()) {
+        angle = Math.atan2(dy, dx);
+      } else {
+        // Sur desktop, utiliser la position de la souris
+        angle = Math.atan2(
+          this.input.mouse.y - canvasHeight / 2,
+          this.input.mouse.x - canvasWidth / 2
+        );
+      }
 
       // Client-side prediction
       player.x = newX;
