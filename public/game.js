@@ -1909,6 +1909,8 @@ class NicknameManager {
     this.nicknameScreen = document.getElementById('nickname-screen');
     this.respawnBtn = document.getElementById('respawn-btn');
 
+    this.spawnProtectionInterval = null; // Store interval for cleanup
+
     // Store handler references for cleanup
     this.handlers = {
       keypress: (e) => {
@@ -1938,6 +1940,12 @@ class NicknameManager {
   }
 
   cleanup() {
+    // Clear spawn protection interval
+    if (this.spawnProtectionInterval) {
+      clearInterval(this.spawnProtectionInterval);
+      this.spawnProtectionInterval = null;
+    }
+
     // Remove event listeners
     if (this.nicknameInput) {
       this.nicknameInput.removeEventListener('keypress', this.handlers.keypress);
@@ -1979,7 +1987,10 @@ class NicknameManager {
     this.playerController.setNickname(nickname);
 
     // Display player name
-    document.getElementById('player-name-display').textContent = `🎮 ${nickname}`;
+    const playerNameDisplay = document.getElementById('player-name-display');
+    if (playerNameDisplay) {
+      playerNameDisplay.textContent = `🎮 ${nickname}`;
+    }
 
     // Show spawn protection
     this.showSpawnProtection();
@@ -1989,31 +2000,47 @@ class NicknameManager {
     const protectionDiv = document.getElementById('spawn-protection');
     const timerSpan = document.getElementById('protection-timer');
 
+    if (!protectionDiv || !timerSpan) return; // Guard against missing elements
+
     protectionDiv.style.display = 'block';
 
-    const interval = setInterval(() => {
+    // Clear previous interval if exists
+    if (this.spawnProtectionInterval) {
+      clearInterval(this.spawnProtectionInterval);
+    }
+
+    this.spawnProtectionInterval = setInterval(() => {
       const remaining = Math.ceil((this.playerController.spawnProtectionEndTime - Date.now()) / 1000);
 
       if (remaining <= 0) {
-        protectionDiv.style.display = 'none';
-        clearInterval(interval);
+        if (protectionDiv) protectionDiv.style.display = 'none';
+        clearInterval(this.spawnProtectionInterval);
+        this.spawnProtectionInterval = null;
         if (window.networkManager) {
           window.networkManager.endSpawnProtection();
         }
       } else {
-        timerSpan.textContent = remaining;
+        if (timerSpan) timerSpan.textContent = remaining;
       }
     }, CONSTANTS.SPAWN_PROTECTION.UPDATE_INTERVAL);
   }
 
   respawn() {
     this.playerController.respawn();
-    document.getElementById('game-over').style.display = 'none';
+
+    const gameOverScreen = document.getElementById('game-over');
+    if (gameOverScreen) {
+      gameOverScreen.style.display = 'none';
+    }
 
     // Show nickname screen again
-    this.nicknameInput.value = '';
-    this.nicknameScreen.style.display = 'flex';
-    this.nicknameInput.focus();
+    if (this.nicknameInput) {
+      this.nicknameInput.value = '';
+      this.nicknameInput.focus();
+    }
+    if (this.nicknameScreen) {
+      this.nicknameScreen.style.display = 'flex';
+    }
   }
 }
 
@@ -2029,6 +2056,8 @@ class GameEngine {
       mousemove: null,
       click: null
     };
+
+    this.animationFrameId = null; // Store requestAnimationFrame ID for cleanup
 
     this.setupCanvas();
     this.initializeManagers();
@@ -2121,9 +2150,14 @@ class GameEngine {
   }
 
   gameLoop() {
-    this.update();
-    this.render();
-    requestAnimationFrame(() => this.gameLoop());
+    try {
+      this.update();
+      this.render();
+    } catch (error) {
+      console.error('Game loop error:', error);
+      // Continue the game loop even if there's an error
+    }
+    this.animationFrameId = requestAnimationFrame(() => this.gameLoop());
   }
 
   start() {
@@ -2132,6 +2166,12 @@ class GameEngine {
   }
 
   cleanup() {
+    // Cancel animation frame to stop game loop
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
     // Remove resize and orientation change event listeners
     window.removeEventListener('resize', this.handlers.resize);
     window.removeEventListener('orientationchange', this.handlers.resize);
