@@ -157,6 +157,147 @@ class InputManager {
 }
 
 /* ============================================
+   AUDIO MANAGER (Simple synthesized sounds)
+   ============================================ */
+
+class AudioManager {
+  constructor() {
+    this.audioContext = null;
+    this.enabled = true;
+    this.initAudioContext();
+  }
+
+  initAudioContext() {
+    try {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn('Web Audio API not supported');
+      this.enabled = false;
+    }
+  }
+
+  play(soundType) {
+    if (!this.enabled || !this.audioContext) return;
+
+    // Resume audio context if needed (for mobile auto-play restrictions)
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
+    const now = this.audioContext.currentTime;
+
+    switch (soundType) {
+      case 'shoot':
+        this.playShoot(now);
+        break;
+      case 'doubleClick':
+        this.playDoubleClick(now);
+        break;
+      case 'longPress':
+        this.playLongPress(now);
+        break;
+      case 'swipe':
+        this.playSwipe(now);
+        break;
+      case 'click':
+        this.playClick(now);
+        break;
+      default:
+        break;
+    }
+  }
+
+  playShoot(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(800, startTime);
+    osc.frequency.exponentialRampToValueAtTime(200, startTime + 0.1);
+
+    gain.gain.setValueAtTime(0.1, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.1);
+  }
+
+  playDoubleClick(startTime) {
+    for (let i = 0; i < 2; i++) {
+      const osc = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+
+      osc.connect(gain);
+      gain.connect(this.audioContext.destination);
+
+      const time = startTime + i * 0.1;
+      osc.frequency.setValueAtTime(1200, time);
+      gain.gain.setValueAtTime(0.1, time);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+      osc.start(time);
+      osc.stop(time + 0.05);
+    }
+  }
+
+  playLongPress(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(600, startTime);
+    osc.frequency.linearRampToValueAtTime(900, startTime + 0.2);
+
+    gain.gain.setValueAtTime(0.08, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.2);
+  }
+
+  playSwipe(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(400, startTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, startTime + 0.15);
+
+    gain.gain.setValueAtTime(0.08, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.15);
+  }
+
+  playClick(startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(this.audioContext.destination);
+
+    osc.frequency.setValueAtTime(1000, startTime);
+    gain.gain.setValueAtTime(0.1, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.05);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.05);
+  }
+
+  toggle() {
+    this.enabled = !this.enabled;
+    return this.enabled;
+  }
+}
+
+/* ============================================
    MOBILE CONTROLS MANAGER
    ============================================ */
 
@@ -167,11 +308,21 @@ class MobileControlsManager {
     this.joystickVector = { dx: 0, dy: 0 };
     this.autoShootActive = false;
     this.autoShootInterval = null;
+    this.currentTarget = null; // Store current auto-shoot target
+
+    // Gesture detection properties
+    this.lastTapTime = 0;
+    this.tapCount = 0;
+    this.longPressTimer = null;
+    this.swipeStartX = 0;
+    this.swipeStartY = 0;
+    this.swipeStartTime = 0;
 
     if (this.isMobile) {
       this.showMobileControls();
       this.setupJoystick();
       this.setupAutoShoot();
+      this.setupAdvancedGestures();
     }
   }
 
@@ -216,6 +367,8 @@ class MobileControlsManager {
       const touch = e.touches[0];
       touchId = touch.identifier;
       this.joystickActive = true;
+      joystickBase.classList.add('active');
+      joystickStick.classList.add('active');
       this.updateJoystickPosition(touch, joystickBase, joystickStick, maxDistance);
     };
 
@@ -233,6 +386,8 @@ class MobileControlsManager {
       e.preventDefault();
       this.joystickActive = false;
       this.joystickVector = { dx: 0, dy: 0 };
+      joystickBase.classList.remove('active');
+      joystickStick.classList.remove('active');
 
       // Reset stick position
       joystickStick.style.transform = 'translate(-50%, -50%)';
@@ -292,9 +447,15 @@ class MobileControlsManager {
     if (this.autoShootActive) {
       autoShootBtn.classList.add('active');
       this.startAutoShoot();
+      if (window.audioManager) {
+        window.audioManager.play('click');
+      }
     } else {
       autoShootBtn.classList.remove('active');
       this.stopAutoShoot();
+      if (window.audioManager) {
+        window.audioManager.play('click');
+      }
     }
   }
 
@@ -311,6 +472,8 @@ class MobileControlsManager {
 
       // Find nearest zombie and shoot at it
       const nearestZombie = this.findNearestZombie(player);
+      this.currentTarget = nearestZombie; // Store for visual indicator
+
       if (nearestZombie) {
         const angle = Math.atan2(
           nearestZombie.y - player.y,
@@ -328,6 +491,11 @@ class MobileControlsManager {
       clearInterval(this.autoShootInterval);
       this.autoShootInterval = null;
     }
+    this.currentTarget = null; // Clear target when stopping
+  }
+
+  getCurrentTarget() {
+    return this.currentTarget;
   }
 
   findNearestZombie(player) {
@@ -339,15 +507,35 @@ class MobileControlsManager {
     if (zombies.length === 0) return null;
 
     let nearestZombie = null;
-    let minDistance = Infinity;
+    let minScore = Infinity;
 
     zombies.forEach(zombie => {
       const dx = zombie.x - player.x;
       const dy = zombie.y - player.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < minDistance) {
-        minDistance = distance;
+      // Calculate angle to zombie
+      const angleToZombie = Math.atan2(dy, dx);
+      const playerAngle = player.angle || 0;
+
+      // Calculate angle difference (normalized to -π to π)
+      let angleDiff = angleToZombie - playerAngle;
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+      // Aim assist: prefer zombies in front of player
+      // Score = distance * angle_penalty
+      // Zombies directly in front have angle_penalty = 1
+      // Zombies behind have angle_penalty > 2
+      const anglePenalty = 1 + Math.abs(angleDiff) / Math.PI;
+
+      // Boss zombies get priority (lower score)
+      const bossPriority = zombie.isBoss ? 0.5 : 1;
+
+      const score = distance * anglePenalty * bossPriority;
+
+      if (score < minScore) {
+        minScore = score;
         nearestZombie = zombie;
       }
     });
@@ -363,8 +551,108 @@ class MobileControlsManager {
     return this.joystickVector;
   }
 
+  setupAdvancedGestures() {
+    const canvas = document.getElementById('gameCanvas');
+    if (!canvas) return;
+
+    // Swipe detection for pause menu (from edge)
+    canvas.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      this.swipeStartX = touch.clientX;
+      this.swipeStartY = touch.clientY;
+      this.swipeStartTime = Date.now();
+
+      // Long press detection
+      this.longPressTimer = setTimeout(() => {
+        this.handleLongPress(touch.clientX, touch.clientY);
+      }, 500);
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      // Cancel long press if moved
+      if (this.longPressTimer) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - this.swipeStartX;
+        const dy = touch.clientY - this.swipeStartY;
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+        }
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+
+      if (e.changedTouches.length === 0) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - this.swipeStartX;
+      const dy = touch.clientY - this.swipeStartY;
+      const dt = Date.now() - this.swipeStartTime;
+
+      // Swipe detection (fast movement)
+      if (dt < 300 && Math.abs(dx) > 100) {
+        this.handleSwipe(dx > 0 ? 'right' : 'left');
+      }
+    }, { passive: true });
+
+    // Double-tap on auto-shoot for burst mode
+    const autoShootBtn = document.getElementById('auto-shoot-btn');
+    if (autoShootBtn) {
+      autoShootBtn.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - this.lastTapTime < 300) {
+          this.tapCount++;
+          if (this.tapCount === 2) {
+            this.handleDoubleTap();
+            this.tapCount = 0;
+          }
+        } else {
+          this.tapCount = 1;
+        }
+        this.lastTapTime = now;
+      }, { passive: true });
+    }
+  }
+
+  handleDoubleTap() {
+    // Visual feedback for double-tap
+    console.log('Double-tap detected on auto-shoot!');
+    // Could enable burst mode here
+    if (window.audioManager) {
+      window.audioManager.play('doubleClick');
+    }
+  }
+
+  handleLongPress(x, y) {
+    // Long press detected
+    console.log('Long press detected at', x, y);
+    if (window.audioManager) {
+      window.audioManager.play('longPress');
+    }
+    // Could trigger special ability or boost
+  }
+
+  handleSwipe(direction) {
+    // Swipe detected
+    console.log('Swipe detected:', direction);
+    if (direction === 'right' && this.swipeStartX < 50) {
+      // Swipe from left edge - could open menu
+      console.log('Menu swipe from left edge');
+      if (window.audioManager) {
+        window.audioManager.play('swipe');
+      }
+    }
+  }
+
   cleanup() {
     this.stopAutoShoot();
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+    }
   }
 }
 
@@ -625,16 +913,25 @@ class Renderer {
   }
 
   clear() {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transforms
     this.ctx.fillStyle = '#0a0a0a';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
   }
 
   render(gameState, playerId) {
     this.clear();
 
+    // Apply pixel ratio scaling for Retina displays
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.ctx.save();
+    this.ctx.scale(pixelRatio, pixelRatio);
+
     const player = gameState.state.players[playerId];
     if (!player) {
       this.renderWaitingMessage();
+      this.ctx.restore();
       return;
     }
 
@@ -654,11 +951,14 @@ class Renderer {
     this.renderBullets(gameState.state.bullets, gameState.config);
     this.renderZombies(gameState.state.zombies);
     this.renderPlayers(gameState.state.players, playerId, gameState.config);
+    this.renderTargetIndicator(player); // Show auto-shoot target indicator
 
     this.ctx.restore();
 
     // Render minimap
     this.renderMinimap(gameState, playerId);
+
+    this.ctx.restore(); // Restore pixel ratio scaling
   }
 
   renderWaitingMessage() {
@@ -985,11 +1285,64 @@ class Renderer {
     });
   }
 
+  renderTargetIndicator(player) {
+    // Only render if mobile controls are active and auto-shoot is on
+    if (!window.mobileControls || !window.mobileControls.autoShootActive) return;
+
+    const target = window.mobileControls.getCurrentTarget();
+    if (!target || !player) return;
+
+    // Draw line from player to target
+    this.ctx.save();
+    this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.4)';
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([10, 5]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(player.x, player.y);
+    this.ctx.lineTo(target.x, target.y);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+
+    // Draw target reticle
+    const reticleSize = 30;
+    this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+    this.ctx.lineWidth = 3;
+
+    // Crosshair
+    this.ctx.beginPath();
+    this.ctx.moveTo(target.x - reticleSize, target.y);
+    this.ctx.lineTo(target.x + reticleSize, target.y);
+    this.ctx.moveTo(target.x, target.y - reticleSize);
+    this.ctx.lineTo(target.x, target.y + reticleSize);
+    this.ctx.stroke();
+
+    // Circle around target
+    this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath();
+    this.ctx.arc(target.x, target.y, reticleSize - 5, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    // Pulsing effect
+    const pulse = Math.sin(Date.now() / 200) * 5;
+    this.ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.arc(target.x, target.y, reticleSize + pulse, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    this.ctx.restore();
+  }
+
   renderMinimap(gameState, playerId) {
     if (!gameState.config.ROOM_WIDTH) return;
 
-    const mapWidth = this.minimapCanvas.width;
-    const mapHeight = this.minimapCanvas.height;
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.minimapCtx.save();
+    this.minimapCtx.scale(pixelRatio, pixelRatio);
+
+    const mapWidth = this.minimapCanvas.width / pixelRatio;
+    const mapHeight = this.minimapCanvas.height / pixelRatio;
     const scaleX = mapWidth / gameState.config.ROOM_WIDTH;
     const scaleY = mapHeight / gameState.config.ROOM_HEIGHT;
 
@@ -1065,6 +1418,8 @@ class Renderer {
     this.minimapCtx.strokeStyle = '#00ff00';
     this.minimapCtx.lineWidth = 2;
     this.minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
+
+    this.minimapCtx.restore(); // Restore pixel ratio scaling
   }
 }
 
@@ -1532,8 +1887,27 @@ class GameEngine {
   }
 
   resizeCanvas() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    // Set display size (CSS pixels)
+    this.canvas.style.width = window.innerWidth + 'px';
+    this.canvas.style.height = window.innerHeight + 'px';
+
+    // Set actual size in memory (scaled for Retina/high-DPI displays)
+    this.canvas.width = window.innerWidth * pixelRatio;
+    this.canvas.height = window.innerHeight * pixelRatio;
+
+    // Note: Pixel ratio scaling is applied in the render() method to avoid accumulation
+
+    // Also resize minimap canvas for Retina displays
+    if (this.renderer.minimapCanvas) {
+      const minimapSize = 200;
+      this.renderer.minimapCanvas.style.width = minimapSize + 'px';
+      this.renderer.minimapCanvas.style.height = minimapSize + 'px';
+      this.renderer.minimapCanvas.width = minimapSize * pixelRatio;
+      this.renderer.minimapCanvas.height = minimapSize * pixelRatio;
+      // Minimap scaling is handled in renderMinimap()
+    }
   }
 
   initializeManagers() {
@@ -1545,9 +1919,11 @@ class GameEngine {
     const camera = new CameraManager();
     window.networkManager = new NetworkManager(io());
     window.gameUI = new UIManager(gameState);
+    window.audioManager = new AudioManager(); // Audio feedback
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
+    window.mobileControls = this.mobileControls; // Make globally accessible
     inputManager.setMobileControls(this.mobileControls);
     window.playerController = this.playerController = new PlayerController(inputManager, networkManager, gameState, camera);
 

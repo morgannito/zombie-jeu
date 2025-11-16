@@ -35,6 +35,12 @@
   --space-xl: 2rem;
   --space-2xl: 3rem;
 
+  /* Safe Area Insets (for notch/Dynamic Island support) */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+
   /* Border Radius */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -134,8 +140,8 @@ body {
    ============================================ */
 #stats {
   position: absolute;
-  top: var(--space-lg);
-  left: var(--space-lg);
+  top: calc(var(--space-lg) + var(--safe-area-top));
+  left: calc(var(--space-lg) + var(--safe-area-left));
   background: var(--bg-overlay);
   padding: var(--space-md);
   border-radius: var(--radius-lg);
@@ -454,8 +460,8 @@ body {
    ============================================ */
 #minimap {
   position: absolute;
-  bottom: var(--space-lg);
-  left: var(--space-lg);
+  bottom: calc(var(--space-lg) + var(--safe-area-bottom));
+  left: calc(var(--space-lg) + var(--safe-area-left));
   width: 12.5rem;
   height: 12.5rem;
   background: var(--bg-overlay);
@@ -1007,8 +1013,8 @@ body {
 /* Virtual Joystick */
 #joystick-container {
   position: absolute;
-  bottom: 2rem;
-  left: 2rem;
+  bottom: calc(2rem + var(--safe-area-bottom));
+  left: calc(2rem + var(--safe-area-left));
   width: 150px;
   height: 150px;
   pointer-events: auto;
@@ -1023,6 +1029,12 @@ body {
   border-radius: 50%;
   box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
   backdrop-filter: blur(3px);
+  transition: all 0.3s ease;
+}
+
+#joystick-base.active {
+  animation: joystick-glow 1s ease-in-out infinite;
+  border-color: rgba(0, 255, 0, 0.8);
 }
 
 #joystick-stick {
@@ -1042,11 +1054,15 @@ body {
   will-change: transform;
 }
 
+#joystick-stick.active {
+  animation: stick-pulse 0.8s ease-in-out infinite;
+}
+
 /* Auto-shoot button */
 #auto-shoot-container {
   position: absolute;
-  bottom: 2rem;
-  right: 2rem;
+  bottom: calc(2rem + var(--safe-area-bottom));
+  right: calc(2rem + var(--safe-area-right));
   pointer-events: auto;
 }
 
@@ -1098,9 +1114,29 @@ body {
 @keyframes pulse-shoot {
   0%, 100% {
     transform: scale(1);
+    box-shadow: 0 0 35px rgba(255, 215, 0, 1), inset 0 0 20px rgba(255, 255, 255, 0.3);
   }
   50% {
     transform: scale(1.05);
+    box-shadow: 0 0 50px rgba(255, 215, 0, 1), 0 0 80px rgba(255, 140, 0, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.5);
+  }
+}
+
+@keyframes joystick-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.6), 0 0 50px rgba(0, 255, 0, 0.3), inset 0 0 25px rgba(0, 255, 0, 0.2);
+  }
+}
+
+@keyframes stick-pulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(0, 255, 0, 1), 0 0 40px rgba(0, 255, 0, 0.6), inset 0 0 15px rgba(255, 255, 255, 0.5);
   }
 }
 
