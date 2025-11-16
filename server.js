@@ -559,6 +559,7 @@ function initializeRooms() {
 function loadRoom(roomIndex) {
   gameState.currentRoom = roomIndex;
   gameState.walls = [];
+  gameState.doors = [];
   gameState.bossSpawned = false;
   gameState.zombiesKilledThisWave = 0;
 
@@ -567,6 +568,9 @@ function loadRoom(roomIndex) {
   // Charger tous les murs (extérieurs + obstacles)
   gameState.walls = [...room.walls, ...room.obstacles];
 
+  // Charger les portes
+  gameState.doors = room.doors || [];
+
   // Nettoyer les zombies existants
   gameState.zombies = {};
 
@@ -574,7 +578,7 @@ function loadRoom(roomIndex) {
     roomIndex: roomIndex,
     totalRooms: CONFIG.ROOMS_PER_RUN,
     walls: gameState.walls,
-    doors: room.doors
+    doors: gameState.doors
   });
 }
 
@@ -1188,6 +1192,7 @@ setInterval(() => {
     particles: gameState.particles,
     loot: gameState.loot,
     walls: gameState.walls,
+    doors: gameState.doors || [],
     wave: gameState.wave, // MODE INFINI - afficher la vague actuelle
     zombiesRemaining: Object.keys(gameState.zombies).length
   });
