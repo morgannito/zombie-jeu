@@ -108,7 +108,9 @@ class InputManager {
     // TAB key for stats panel
     if (e.key === 'Tab') {
       e.preventDefault();
-      gameUI.toggleStatsPanel();
+      if (window.gameUI) {
+        window.gameUI.toggleStatsPanel();
+      }
     }
   }
 
@@ -318,6 +320,10 @@ class MobileControlsManager {
     this.swipeStartY = 0;
     this.swipeStartTime = 0;
 
+    // Store handlers and elements for cleanup
+    this.handlers = {};
+    this.elements = {};
+
     if (this.isMobile) {
       this.showMobileControls();
       this.setupJoystick();
@@ -359,6 +365,9 @@ class MobileControlsManager {
       return;
     }
 
+    this.elements.joystickBase = joystickBase;
+    this.elements.joystickStick = joystickStick;
+
     let touchId = null;
     const maxDistance = 45; // Maximum distance the stick can move from center
 
@@ -392,6 +401,11 @@ class MobileControlsManager {
       // Reset stick position
       joystickStick.style.transform = 'translate(-50%, -50%)';
     };
+
+    // Store handlers for cleanup
+    this.handlers.joystickStart = handleTouchStart;
+    this.handlers.joystickMove = handleTouchMove;
+    this.handlers.joystickEnd = handleTouchEnd;
 
     joystickBase.addEventListener('touchstart', handleTouchStart, { passive: false });
     joystickBase.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -434,10 +448,15 @@ class MobileControlsManager {
       return;
     }
 
-    autoShootBtn.addEventListener('touchstart', (e) => {
+    this.elements.autoShootBtn = autoShootBtn;
+
+    const handleAutoShoot = (e) => {
       e.preventDefault();
       this.toggleAutoShoot();
-    });
+    };
+
+    this.handlers.autoShoot = handleAutoShoot;
+    autoShootBtn.addEventListener('touchstart', handleAutoShoot);
   }
 
   toggleAutoShoot() {
@@ -468,7 +487,7 @@ class MobileControlsManager {
       if (!window.gameState || !window.networkManager || !window.playerController) return;
 
       const player = window.gameState.getPlayer();
-      if (!player || !player.alive || !playerController.gameStarted) return;
+      if (!player || !player.alive || !window.playerController.gameStarted) return;
 
       // Find nearest zombie and shoot at it
       const nearestZombie = this.findNearestZombie(player);
@@ -555,8 +574,10 @@ class MobileControlsManager {
     const canvas = document.getElementById('gameCanvas');
     if (!canvas) return;
 
+    this.elements.canvas = canvas;
+
     // Swipe detection for pause menu (from edge)
-    canvas.addEventListener('touchstart', (e) => {
+    const handleGestureTouchStart = (e) => {
       const touch = e.touches[0];
       this.swipeStartX = touch.clientX;
       this.swipeStartY = touch.clientY;
@@ -566,9 +587,9 @@ class MobileControlsManager {
       this.longPressTimer = setTimeout(() => {
         this.handleLongPress(touch.clientX, touch.clientY);
       }, 500);
-    }, { passive: true });
+    };
 
-    canvas.addEventListener('touchmove', (e) => {
+    const handleGestureTouchMove = (e) => {
       // Cancel long press if moved
       if (this.longPressTimer) {
         const touch = e.touches[0];
@@ -579,9 +600,9 @@ class MobileControlsManager {
           this.longPressTimer = null;
         }
       }
-    }, { passive: true });
+    };
 
-    canvas.addEventListener('touchend', (e) => {
+    const handleGestureTouchEnd = (e) => {
       if (this.longPressTimer) {
         clearTimeout(this.longPressTimer);
         this.longPressTimer = null;
@@ -597,12 +618,21 @@ class MobileControlsManager {
       if (dt < 300 && Math.abs(dx) > 100) {
         this.handleSwipe(dx > 0 ? 'right' : 'left');
       }
-    }, { passive: true });
+    };
+
+    // Store handlers for cleanup
+    this.handlers.gestureTouchStart = handleGestureTouchStart;
+    this.handlers.gestureTouchMove = handleGestureTouchMove;
+    this.handlers.gestureTouchEnd = handleGestureTouchEnd;
+
+    canvas.addEventListener('touchstart', handleGestureTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', handleGestureTouchMove, { passive: true });
+    canvas.addEventListener('touchend', handleGestureTouchEnd, { passive: true });
 
     // Double-tap on auto-shoot for burst mode
-    const autoShootBtn = document.getElementById('auto-shoot-btn');
+    const autoShootBtn = this.elements.autoShootBtn || document.getElementById('auto-shoot-btn');
     if (autoShootBtn) {
-      autoShootBtn.addEventListener('touchend', (e) => {
+      const handleDoubleTapDetect = (e) => {
         const now = Date.now();
         if (now - this.lastTapTime < 300) {
           this.tapCount++;
@@ -614,7 +644,10 @@ class MobileControlsManager {
           this.tapCount = 1;
         }
         this.lastTapTime = now;
-      }, { passive: true });
+      };
+
+      this.handlers.doubleTapDetect = handleDoubleTapDetect;
+      autoShootBtn.addEventListener('touchend', handleDoubleTapDetect, { passive: true });
     }
   }
 
@@ -649,10 +682,49 @@ class MobileControlsManager {
   }
 
   cleanup() {
+    // Stop auto-shoot interval
     this.stopAutoShoot();
+
+    // Clear long press timer
     if (this.longPressTimer) {
       clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
     }
+
+    // Remove joystick event listeners
+    if (this.elements.joystickBase && this.handlers.joystickStart) {
+      this.elements.joystickBase.removeEventListener('touchstart', this.handlers.joystickStart);
+      this.elements.joystickBase.removeEventListener('touchmove', this.handlers.joystickMove);
+      this.elements.joystickBase.removeEventListener('touchend', this.handlers.joystickEnd);
+      this.elements.joystickBase.removeEventListener('touchcancel', this.handlers.joystickEnd);
+    }
+
+    // Remove auto-shoot event listener
+    if (this.elements.autoShootBtn && this.handlers.autoShoot) {
+      this.elements.autoShootBtn.removeEventListener('touchstart', this.handlers.autoShoot);
+    }
+
+    // Remove gesture event listeners
+    if (this.elements.canvas) {
+      if (this.handlers.gestureTouchStart) {
+        this.elements.canvas.removeEventListener('touchstart', this.handlers.gestureTouchStart);
+      }
+      if (this.handlers.gestureTouchMove) {
+        this.elements.canvas.removeEventListener('touchmove', this.handlers.gestureTouchMove);
+      }
+      if (this.handlers.gestureTouchEnd) {
+        this.elements.canvas.removeEventListener('touchend', this.handlers.gestureTouchEnd);
+      }
+    }
+
+    // Remove double-tap listener
+    if (this.elements.autoShootBtn && this.handlers.doubleTapDetect) {
+      this.elements.autoShootBtn.removeEventListener('touchend', this.handlers.doubleTapDetect);
+    }
+
+    // Clear references
+    this.handlers = {};
+    this.elements = {};
   }
 }
 
@@ -923,15 +995,9 @@ class Renderer {
   render(gameState, playerId) {
     this.clear();
 
-    // Apply pixel ratio scaling for Retina displays
-    const pixelRatio = window.devicePixelRatio || 1;
-    this.ctx.save();
-    this.ctx.scale(pixelRatio, pixelRatio);
-
     const player = gameState.state.players[playerId];
     if (!player) {
       this.renderWaitingMessage();
-      this.ctx.restore();
       return;
     }
 
@@ -957,8 +1023,6 @@ class Renderer {
 
     // Render minimap
     this.renderMinimap(gameState, playerId);
-
-    this.ctx.restore(); // Restore pixel ratio scaling
   }
 
   renderWaitingMessage() {
@@ -1337,12 +1401,8 @@ class Renderer {
   renderMinimap(gameState, playerId) {
     if (!gameState.config.ROOM_WIDTH) return;
 
-    const pixelRatio = window.devicePixelRatio || 1;
-    this.minimapCtx.save();
-    this.minimapCtx.scale(pixelRatio, pixelRatio);
-
-    const mapWidth = this.minimapCanvas.width / pixelRatio;
-    const mapHeight = this.minimapCanvas.height / pixelRatio;
+    const mapWidth = this.minimapCanvas.width;
+    const mapHeight = this.minimapCanvas.height;
     const scaleX = mapWidth / gameState.config.ROOM_WIDTH;
     const scaleY = mapHeight / gameState.config.ROOM_HEIGHT;
 
@@ -1418,8 +1478,6 @@ class Renderer {
     this.minimapCtx.strokeStyle = '#00ff00';
     this.minimapCtx.lineWidth = 2;
     this.minimapCtx.strokeRect(0, 0, mapWidth, mapHeight);
-
-    this.minimapCtx.restore(); // Restore pixel ratio scaling
   }
 }
 
@@ -1873,6 +1931,9 @@ class GameEngine {
     this.setupCanvas();
     this.initializeManagers();
     this.start();
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => this.cleanup());
   }
 
   setupCanvas() {
@@ -1961,6 +2022,13 @@ class GameEngine {
   start() {
     console.log('🎮 Zombie Survival - Game Engine Started');
     this.gameLoop();
+  }
+
+  cleanup() {
+    // Cleanup mobile controls
+    if (this.mobileControls && typeof this.mobileControls.cleanup === 'function') {
+      this.mobileControls.cleanup();
+    }
   }
 }
 
