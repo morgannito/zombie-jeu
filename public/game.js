@@ -29,6 +29,12 @@ const CONSTANTS = {
     SHOP_DELAY: 2000,
     MILESTONE_DELAY: 2500,
     BOSS_ANNOUNCEMENT: 2500
+  },
+  MOBILE: {
+    AUTO_SHOOT_INTERVAL: 250, // ms between auto-shoot attempts
+    GESTURE_THRESHOLD: 50, // minimum distance for swipe detection
+    LONG_PRESS_DURATION: 500, // ms for long press detection
+    DOUBLE_TAP_DELAY: 300 // ms between taps for double-tap
   }
 };
 
@@ -80,7 +86,6 @@ class GameStateManager {
     this.powerupTypes = data.powerupTypes;
     this.zombieTypes = data.zombieTypes;
     this.shopItems = data.shopItems;
-    console.log('🎮 Game initialized! Player ID:', this.playerId);
   }
 }
 
@@ -93,13 +98,26 @@ class InputManager {
     this.keys = {};
     this.mouse = { x: 0, y: 0 };
     this.mobileControls = null;
+
+    // Store handler references for cleanup
+    this.handlers = {
+      keydown: (e) => this.handleKeyDown(e),
+      keyup: (e) => this.handleKeyUp(e)
+    };
+
     this.setupEventListeners();
   }
 
   setupEventListeners() {
     // Keyboard events
-    window.addEventListener('keydown', (e) => this.handleKeyDown(e));
-    window.addEventListener('keyup', (e) => this.handleKeyUp(e));
+    window.addEventListener('keydown', this.handlers.keydown);
+    window.addEventListener('keyup', this.handlers.keyup);
+  }
+
+  cleanup() {
+    // Remove keyboard event listeners
+    window.removeEventListener('keydown', this.handlers.keydown);
+    window.removeEventListener('keyup', this.handlers.keyup);
   }
 
   handleKeyDown(e) {
@@ -479,7 +497,7 @@ class MobileControlsManager {
   }
 
   startAutoShoot() {
-    // Auto shoot every 100ms when active (server will handle fire rate limiting)
+    // Auto shoot at regular intervals (server will handle fire rate limiting)
     this.autoShootInterval = setInterval(() => {
       if (!this.autoShootActive) return;
 
@@ -502,7 +520,7 @@ class MobileControlsManager {
         player.angle = angle;
         window.networkManager.shoot(angle);
       }
-    }, 100);
+    }, CONSTANTS.MOBILE.AUTO_SHOOT_INTERVAL);
   }
 
   stopAutoShoot() {
@@ -653,7 +671,6 @@ class MobileControlsManager {
 
   handleDoubleTap() {
     // Visual feedback for double-tap
-    console.log('Double-tap detected on auto-shoot!');
     // Could enable burst mode here
     if (window.audioManager) {
       window.audioManager.play('doubleClick');
@@ -662,7 +679,6 @@ class MobileControlsManager {
 
   handleLongPress(x, y) {
     // Long press detected
-    console.log('Long press detected at', x, y);
     if (window.audioManager) {
       window.audioManager.play('longPress');
     }
@@ -671,10 +687,8 @@ class MobileControlsManager {
 
   handleSwipe(direction) {
     // Swipe detected
-    console.log('Swipe detected:', direction);
-    if (direction === 'right' && this.swipeStartX < 50) {
+    if (direction === 'right' && this.swipeStartX < CONSTANTS.MOBILE.GESTURE_THRESHOLD) {
       // Swipe from left edge - could open menu
-      console.log('Menu swipe from left edge');
       if (window.audioManager) {
         window.audioManager.play('swipe');
       }
@@ -771,62 +785,74 @@ class NetworkManager {
   }
 
   handleInit(data) {
-    gameState.initialize(data);
+    window.gameState.initialize(data);
   }
 
   handleGameState(state) {
     // Client-side prediction for local player
-    if (gameState.state && gameState.state.players && gameState.state.players[gameState.playerId]) {
-      const localPlayer = gameState.state.players[gameState.playerId];
+    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const localPlayer = window.gameState.state.players[window.gameState.playerId];
       const { x, y, angle } = localPlayer;
 
-      gameState.updateState(state);
+      window.gameState.updateState(state);
 
       // Restore predicted position
-      if (gameState.state.players[gameState.playerId]) {
-        gameState.state.players[gameState.playerId].x = x;
-        gameState.state.players[gameState.playerId].y = y;
-        gameState.state.players[gameState.playerId].angle = angle;
+      if (window.gameState.state.players[window.gameState.playerId]) {
+        window.gameState.state.players[window.gameState.playerId].x = x;
+        window.gameState.state.players[window.gameState.playerId].y = y;
+        window.gameState.state.players[window.gameState.playerId].angle = angle;
       }
     } else {
-      gameState.updateState(state);
+      window.gameState.updateState(state);
     }
 
-    gameUI.update();
+    if (window.gameUI) {
+      window.gameUI.update();
+    }
   }
 
   handleBossSpawned(data) {
-    gameUI.showBossAnnouncement(data.bossName);
+    if (window.gameUI) {
+      window.gameUI.showBossAnnouncement(data.bossName);
+    }
   }
 
   handleNewWave(data) {
-    gameUI.showNewWaveAnnouncement(data.wave, data.zombiesCount);
-    setTimeout(() => gameUI.showShop(), CONSTANTS.ANIMATIONS.SHOP_DELAY);
+    if (window.gameUI) {
+      window.gameUI.showNewWaveAnnouncement(data.wave, data.zombiesCount);
+      setTimeout(() => window.gameUI.showShop(), CONSTANTS.ANIMATIONS.SHOP_DELAY);
+    }
   }
 
   handleLevelUp(data) {
-    if (data.milestoneBonus) {
-      gameUI.showMilestoneBonus(data.milestoneBonus, data.newLevel);
-      setTimeout(() => {
-        gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
-      }, CONSTANTS.ANIMATIONS.MILESTONE_DELAY);
-    } else {
-      gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
+    if (window.gameUI) {
+      if (data.milestoneBonus) {
+        window.gameUI.showMilestoneBonus(data.milestoneBonus, data.newLevel);
+        setTimeout(() => {
+          if (window.gameUI) {
+            window.gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
+          }
+        }, CONSTANTS.ANIMATIONS.MILESTONE_DELAY);
+      } else {
+        window.gameUI.showLevelUpScreen(data.newLevel, data.upgradeChoices);
+      }
     }
   }
 
   handleRoomChanged(data) {
-    gameUI.showRoomAnnouncement(data.roomIndex + 1, data.totalRooms);
+    if (window.gameUI) {
+      window.gameUI.showRoomAnnouncement(data.roomIndex + 1, data.totalRooms);
+    }
   }
 
   handleRunCompleted(data) {
-    gameUI.showRunCompleted(data.gold, data.level);
+    if (window.gameUI) {
+      window.gameUI.showRunCompleted(data.gold, data.level);
+    }
   }
 
   handleUpgradeSelected(data) {
-    if (data.success) {
-      console.log('✅ Upgrade selected:', data.upgradeId);
-    }
+    // Upgrade successfully selected
   }
 
   handleShopUpdate(data) {
@@ -1505,19 +1531,35 @@ class UIManager {
   constructor(gameState) {
     this.gameState = gameState;
     this.shopOpen = false;
+
+    // Store handler references for cleanup
+    this.handlers = {
+      shopClose: () => this.hideShop()
+    };
+
+    this.shopCloseBtn = document.getElementById('shop-close-btn');
     this.setupEventListeners();
   }
 
   setupEventListeners() {
     // Shop close button
-    document.getElementById('shop-close-btn').addEventListener('click', () => {
-      this.hideShop();
-    });
+    if (this.shopCloseBtn) {
+      this.shopCloseBtn.addEventListener('click', this.handlers.shopClose);
+    }
 
     // Make buyItem global for onclick handlers
     window.buyItem = (itemId, category) => {
-      networkManager.buyItem(itemId, category);
+      if (window.networkManager) {
+        window.networkManager.buyItem(itemId, category);
+      }
     };
+  }
+
+  cleanup() {
+    // Remove shop close button listener
+    if (this.shopCloseBtn) {
+      this.shopCloseBtn.removeEventListener('click', this.handlers.shopClose);
+    }
   }
 
   update() {
@@ -1637,7 +1679,9 @@ class UIManager {
       `;
 
       card.addEventListener('click', () => {
-        networkManager.selectUpgrade(upgrade.id);
+        if (window.networkManager) {
+          window.networkManager.selectUpgrade(upgrade.id);
+        }
         levelUpScreen.style.display = 'none';
       });
 
@@ -1863,23 +1907,49 @@ class NicknameManager {
     this.nicknameInput = document.getElementById('nickname-input');
     this.startGameBtn = document.getElementById('start-game-btn');
     this.nicknameScreen = document.getElementById('nickname-screen');
+    this.respawnBtn = document.getElementById('respawn-btn');
+
+    // Store handler references for cleanup
+    this.handlers = {
+      keypress: (e) => {
+        if (e.key === 'Enter') {
+          this.startGame();
+        }
+      },
+      startGame: () => this.startGame(),
+      respawn: () => this.respawn()
+    };
+
     this.setupEventListeners();
   }
 
   setupEventListeners() {
-    this.nicknameInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.startGame();
-      }
-    });
+    if (this.nicknameInput) {
+      this.nicknameInput.addEventListener('keypress', this.handlers.keypress);
+    }
 
-    this.startGameBtn.addEventListener('click', () => {
-      this.startGame();
-    });
+    if (this.startGameBtn) {
+      this.startGameBtn.addEventListener('click', this.handlers.startGame);
+    }
 
-    document.getElementById('respawn-btn').addEventListener('click', () => {
-      this.respawn();
-    });
+    if (this.respawnBtn) {
+      this.respawnBtn.addEventListener('click', this.handlers.respawn);
+    }
+  }
+
+  cleanup() {
+    // Remove event listeners
+    if (this.nicknameInput) {
+      this.nicknameInput.removeEventListener('keypress', this.handlers.keypress);
+    }
+
+    if (this.startGameBtn) {
+      this.startGameBtn.removeEventListener('click', this.handlers.startGame);
+    }
+
+    if (this.respawnBtn) {
+      this.respawnBtn.removeEventListener('click', this.handlers.respawn);
+    }
   }
 
   startGame() {
@@ -1892,6 +1962,13 @@ class NicknameManager {
 
     if (nickname.length > CONSTANTS.NICKNAME.MAX_LENGTH) {
       alert(`Votre pseudo ne peut pas dépasser ${CONSTANTS.NICKNAME.MAX_LENGTH} caractères !`);
+      return;
+    }
+
+    // Validate nickname format (alphanumeric, spaces, underscores, hyphens only)
+    const nicknameRegex = /^[\w\s-]+$/u;
+    if (!nicknameRegex.test(nickname)) {
+      alert('Votre pseudo ne peut contenir que des lettres, chiffres, espaces, tirets et underscores !');
       return;
     }
 
@@ -1920,7 +1997,9 @@ class NicknameManager {
       if (remaining <= 0) {
         protectionDiv.style.display = 'none';
         clearInterval(interval);
-        networkManager.endSpawnProtection();
+        if (window.networkManager) {
+          window.networkManager.endSpawnProtection();
+        }
       } else {
         timerSpan.textContent = remaining;
       }
@@ -1944,6 +2023,13 @@ class NicknameManager {
 
 class GameEngine {
   constructor() {
+    // Store handler references for cleanup
+    this.handlers = {
+      resize: () => this.resizeCanvas(),
+      mousemove: null,
+      click: null
+    };
+
     this.setupCanvas();
     this.initializeManagers();
     this.start();
@@ -1960,7 +2046,10 @@ class GameEngine {
 
     // Resize canvas
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    window.addEventListener('resize', this.handlers.resize);
+
+    // Handle orientation changes on mobile
+    window.addEventListener('orientationchange', this.handlers.resize);
   }
 
   resizeCanvas() {
@@ -1976,8 +2065,8 @@ class GameEngine {
 
     // Note: Pixel ratio scaling is applied in the render() method to avoid accumulation
 
-    // Also resize minimap canvas for Retina displays
-    if (this.renderer.minimapCanvas) {
+    // Also resize minimap canvas for Retina displays (only if renderer exists)
+    if (this.renderer && this.renderer.minimapCanvas) {
       const minimapSize = 200;
       this.renderer.minimapCanvas.style.width = minimapSize + 'px';
       this.renderer.minimapCanvas.style.height = minimapSize + 'px';
@@ -2011,13 +2100,15 @@ class GameEngine {
 
     // Mouse events (only if not mobile)
     if (!this.mobileControls.isMobile) {
-      this.canvas.addEventListener('mousemove', (e) => {
+      this.handlers.mousemove = (e) => {
         inputManager.updateMouse(e.clientX, e.clientY);
-      });
-
-      this.canvas.addEventListener('click', () => {
+      };
+      this.handlers.click = () => {
         this.playerController.shoot(this.canvas.width, this.canvas.height);
-      });
+      };
+
+      this.canvas.addEventListener('mousemove', this.handlers.mousemove);
+      this.canvas.addEventListener('click', this.handlers.click);
     }
   }
 
@@ -2041,7 +2132,31 @@ class GameEngine {
   }
 
   cleanup() {
-    // Cleanup mobile controls
+    // Remove resize and orientation change event listeners
+    window.removeEventListener('resize', this.handlers.resize);
+    window.removeEventListener('orientationchange', this.handlers.resize);
+
+    // Remove mouse event listeners (if desktop)
+    if (this.handlers.mousemove) {
+      this.canvas.removeEventListener('mousemove', this.handlers.mousemove);
+    }
+    if (this.handlers.click) {
+      this.canvas.removeEventListener('click', this.handlers.click);
+    }
+
+    // Cleanup all managers
+    if (window.inputManager && typeof window.inputManager.cleanup === 'function') {
+      window.inputManager.cleanup();
+    }
+
+    if (window.gameUI && typeof window.gameUI.cleanup === 'function') {
+      window.gameUI.cleanup();
+    }
+
+    if (this.nicknameManager && typeof this.nicknameManager.cleanup === 'function') {
+      this.nicknameManager.cleanup();
+    }
+
     if (this.mobileControls && typeof this.mobileControls.cleanup === 'function') {
       this.mobileControls.cleanup();
     }

@@ -116,8 +116,6 @@ body {
   top: 0;
   left: 0;
   z-index: var(--z-canvas);
-  /* Performance optimization */
-  will-change: transform;
 }
 
 /* ============================================
@@ -148,8 +146,6 @@ body {
   border: 2px solid var(--color-primary);
   pointer-events: auto;
   backdrop-filter: blur(10px);
-  /* Performance */
-  will-change: contents;
 }
 
 #player-name-display {
@@ -980,7 +976,6 @@ body {
    PERFORMANCE OPTIMIZATIONS
    ============================================ */
 /* Promote frequently animated elements to their own layer */
-.upgrade-card,
 #health-fill,
 #xp-fill,
 #start-game-btn,
