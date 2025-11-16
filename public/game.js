@@ -1064,7 +1064,8 @@ class Renderer {
     this.ctx.fillStyle = '#ffffff';
     this.ctx.font = 'bold 24px Arial';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('Connexion au serveur...', this.canvas.width / 2, this.canvas.height / 2);
+    // Use CSS pixels (window dimensions) for proper centering on high-DPI displays
+    this.ctx.fillText('Connexion au serveur...', window.innerWidth / 2, window.innerHeight / 2);
   }
 
   renderFloor(config) {
@@ -2133,7 +2134,8 @@ class GameEngine {
         window.inputManager.updateMouse(e.clientX, e.clientY);
       };
       this.handlers.click = () => {
-        this.playerController.shoot(this.canvas.width, this.canvas.height);
+        // Use CSS pixels for consistent shooting angle calculation
+        this.playerController.shoot(window.innerWidth, window.innerHeight);
       };
 
       this.canvas.addEventListener('mousemove', this.handlers.mousemove);
@@ -2142,7 +2144,9 @@ class GameEngine {
   }
 
   update() {
-    this.playerController.update(this.canvas.width, this.canvas.height);
+    // Use CSS pixels (window dimensions) instead of physical canvas dimensions
+    // to ensure proper camera centering on high-DPI displays (mobile)
+    this.playerController.update(window.innerWidth, window.innerHeight);
   }
 
   render() {
