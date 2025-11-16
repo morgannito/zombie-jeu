@@ -353,13 +353,13 @@ class PlayerController {
     }
   }
 
-  shoot() {
+  shoot(canvasWidth, canvasHeight) {
     const player = this.gameState.getPlayer();
     if (!player || !player.alive || !this.gameStarted) return;
 
     const angle = Math.atan2(
-      this.input.mouse.y - canvas.height / 2,
-      this.input.mouse.x - canvas.width / 2
+      this.input.mouse.y - canvasHeight / 2,
+      this.input.mouse.x - canvasWidth / 2
     );
 
     this.network.shoot(angle);
@@ -475,6 +475,8 @@ class Renderer {
   }
 
   renderDoors(doors) {
+    if (!doors || !Array.isArray(doors)) return;
+
     doors.forEach(door => {
       this.ctx.fillStyle = door.active ? '#00ff00' : '#ff0000';
       this.ctx.fillRect(door.x, door.y, door.width, door.height);
@@ -1284,7 +1286,7 @@ class GameEngine {
     });
 
     this.canvas.addEventListener('click', () => {
-      this.playerController.shoot();
+      this.playerController.shoot(this.canvas.width, this.canvas.height);
     });
   }
 
