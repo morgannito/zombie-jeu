@@ -1097,6 +1097,7 @@ class Renderer {
     this.renderLoot(gameState.state.loot, gameState.config);
     this.renderParticles(gameState.state.particles);
     this.renderPoisonTrails(gameState.state.poisonTrails);
+    this.renderExplosions(gameState.state.explosions);
     this.renderBullets(gameState.state.bullets, gameState.config);
     this.renderZombies(gameState.state.zombies);
     this.renderPlayers(gameState.state.players, playerId, gameState.config);
@@ -1195,7 +1196,8 @@ class Renderer {
         health: '+',
         speed: '»',
         shotgun: 'S',
-        machinegun: 'M'
+        machinegun: 'M',
+        rocketlauncher: 'R'
       };
 
       this.ctx.fillText(symbols[powerup.type] || '?', powerup.x, powerup.y);
@@ -1268,13 +1270,103 @@ class Renderer {
     });
   }
 
+  renderExplosions(explosions) {
+    const now = Date.now();
+    Object.values(explosions || {}).forEach(explosion => {
+      const age = now - explosion.createdAt;
+      const progress = age / explosion.duration;
+
+      // Ne pas afficher si l'explosion est terminée
+      if (progress >= 1) return;
+
+      // Animation d'expansion
+      const currentRadius = explosion.radius * (0.3 + progress * 0.7);
+
+      // Fade out
+      const alpha = 1 - progress;
+
+      if (explosion.isRocket) {
+        // Explosion de roquette - effet plus intense
+
+        // Cercle extérieur rouge vif
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.globalAlpha = alpha * 0.5;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Cercle moyen orange
+        this.ctx.fillStyle = '#ff8800';
+        this.ctx.globalAlpha = alpha * 0.7;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.7, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Cercle intérieur jaune brillant
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.globalAlpha = alpha * 0.9;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.4, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Centre blanc très brillant
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.globalAlpha = alpha;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Contour rouge pulsant
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 3;
+        this.ctx.globalAlpha = alpha * 0.8;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius, 0, Math.PI * 2);
+        this.ctx.stroke();
+
+        // Rayons de l'explosion (8 rayons)
+        this.ctx.strokeStyle = '#ffff00';
+        this.ctx.lineWidth = 2;
+        this.ctx.globalAlpha = alpha * 0.6;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const rayLength = currentRadius * 1.2;
+          this.ctx.beginPath();
+          this.ctx.moveTo(explosion.x, explosion.y);
+          this.ctx.lineTo(
+            explosion.x + Math.cos(angle) * rayLength,
+            explosion.y + Math.sin(angle) * rayLength
+          );
+          this.ctx.stroke();
+        }
+
+      } else {
+        // Explosion normale
+        this.ctx.fillStyle = '#ff8800';
+        this.ctx.globalAlpha = alpha * 0.6;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.globalAlpha = alpha * 0.8;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.5, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+
+      this.ctx.globalAlpha = 1;
+    });
+  }
+
   renderBullets(bullets, config) {
     Object.values(bullets).forEach(bullet => {
+      const bulletSize = bullet.size || config.BULLET_SIZE;
       this.ctx.fillStyle = bullet.color || '#ffff00';
       this.ctx.shadowBlur = 10;
       this.ctx.shadowColor = bullet.color || '#ffff00';
       this.ctx.beginPath();
-      this.ctx.arc(bullet.x, bullet.y, config.BULLET_SIZE, 0, Math.PI * 2);
+      this.ctx.arc(bullet.x, bullet.y, bulletSize, 0, Math.PI * 2);
       this.ctx.fill();
       this.ctx.shadowBlur = 0;
     });
@@ -1649,6 +1741,204 @@ class Renderer {
     this.ctx.fillText(text, x, y + offsetY);
   }
 
+  // Fonction pour dessiner les sprites d'armes
+  renderWeaponSprite(x, y, angle, weaponType, isCurrentPlayer) {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(angle);
+
+    const primaryColor = isCurrentPlayer ? '#333333' : '#444444';
+    const accentColor = isCurrentPlayer ? '#00ffff' : '#ffaa00';
+
+    switch(weaponType) {
+      case 'pistol':
+        // Pistolet compact
+        // Corps de l'arme
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, -3, 18, 6);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -3, 18, 6);
+
+        // Canon
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(23, -2, 8, 4);
+        this.ctx.strokeRect(23, -2, 8, 4);
+
+        // Poignée
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, 3, 6, 8);
+        this.ctx.strokeRect(5, 3, 6, 8);
+
+        // Détail accent
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(15, -1, 3, 2);
+        break;
+
+      case 'shotgun':
+        // Shotgun à double canon
+        // Corps principal
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, -4, 25, 8);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -4, 25, 8);
+
+        // Double canon
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(30, -4, 12, 3);
+        this.ctx.fillRect(30, 1, 12, 3);
+        this.ctx.strokeRect(30, -4, 12, 3);
+        this.ctx.strokeRect(30, 1, 12, 3);
+
+        // Crosse
+        this.ctx.fillStyle = '#8B4513';
+        this.ctx.fillRect(-5, -3, 10, 6);
+        this.ctx.strokeRect(-5, -3, 10, 6);
+
+        // Pompe
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(12, -2, 8, 4);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeRect(12, -2, 8, 4);
+
+        // Détails sur les canons
+        this.ctx.fillStyle = '#ff6600';
+        this.ctx.fillRect(40, -3, 2, 1);
+        this.ctx.fillRect(40, 2, 2, 1);
+        break;
+
+      case 'machinegun':
+        // Mitraillette
+        // Corps principal
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(0, -5, 30, 10);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(0, -5, 30, 10);
+
+        // Canon avec refroidissement
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(30, -3, 15, 6);
+        this.ctx.strokeRect(30, -3, 15, 6);
+
+        // Grilles de refroidissement
+        for(let i = 0; i < 4; i++) {
+          this.ctx.fillStyle = '#00ffff';
+          this.ctx.fillRect(32 + i * 3, -2, 1, 4);
+        }
+
+        // Chargeur
+        this.ctx.fillStyle = '#444';
+        this.ctx.fillRect(10, 5, 8, 12);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeRect(10, 5, 8, 12);
+
+        // Crosse pliable
+        this.ctx.fillStyle = '#333';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(-5, -3);
+        this.ctx.lineTo(-12, -5);
+        this.ctx.lineTo(-12, 5);
+        this.ctx.lineTo(-5, 3);
+        this.ctx.stroke();
+
+        // Viseur laser
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.beginPath();
+        this.ctx.arc(45, 0, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Détails accent
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(5, -3, 2, 6);
+        this.ctx.fillRect(20, -3, 2, 6);
+        break;
+
+      case 'rocketlauncher':
+        // Lance-roquettes imposant
+        // Tube principal (large)
+        this.ctx.fillStyle = '#444';
+        this.ctx.fillRect(0, -7, 40, 14);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.strokeRect(0, -7, 40, 14);
+
+        // Bandes de sécurité jaunes/noires
+        for(let i = 0; i < 3; i++) {
+          this.ctx.fillStyle = i % 2 === 0 ? '#ffff00' : '#000';
+          this.ctx.fillRect(8 + i * 8, -6, 6, 12);
+        }
+
+        // Tube de visée supérieur
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(5, -10, 30, 3);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -10, 30, 3);
+
+        // Ouverture avant (tube de lancement)
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(40, -6, 8, 12);
+        this.ctx.strokeRect(40, -6, 8, 12);
+
+        // Bordure du tube de lancement
+        this.ctx.fillStyle = '#ff4400';
+        this.ctx.fillRect(40, -7, 2, 14);
+        this.ctx.fillRect(46, -7, 2, 14);
+
+        // Poignée avant
+        this.ctx.fillStyle = '#333';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(15, 7);
+        this.ctx.lineTo(15, 12);
+        this.ctx.lineTo(20, 12);
+        this.ctx.lineTo(20, 7);
+        this.ctx.stroke();
+
+        // Gâchette arrière
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(-3, 2, 5, 10);
+        this.ctx.strokeRect(-3, 2, 5, 10);
+
+        // Détails rouges (danger)
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.fillRect(38, -8, 3, 2);
+        this.ctx.fillRect(38, 6, 3, 2);
+
+        // Indicateur LED (prêt à tirer)
+        this.ctx.fillStyle = '#00ff00';
+        this.ctx.beginPath();
+        this.ctx.arc(10, 0, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Évents de recul
+        this.ctx.fillStyle = '#666';
+        for(let i = 0; i < 3; i++) {
+          this.ctx.fillRect(-8 - i * 3, -4 + i * 2, 5, 2);
+        }
+
+        // Détails accent
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(2, -5, 3, 10);
+        break;
+
+      default:
+        // Arme par défaut (pistolet)
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, -3, 18, 6);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -3, 18, 6);
+    }
+
+    this.ctx.restore();
+  }
+
   renderPlayers(players, currentPlayerId, config) {
     Object.entries(players).forEach(([pid, p]) => {
       const isCurrentPlayer = pid === currentPlayerId;
@@ -1672,17 +1962,9 @@ class Renderer {
       this.ctx.lineWidth = 3;
       this.ctx.stroke();
 
-      // Weapon direction
-      const weaponLength = config.PLAYER_SIZE * 2;
-      this.ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
-      this.ctx.lineWidth = 4;
-      this.ctx.beginPath();
-      this.ctx.moveTo(p.x, p.y);
-      this.ctx.lineTo(
-        p.x + Math.cos(p.angle) * weaponLength,
-        p.y + Math.sin(p.angle) * weaponLength
-      );
-      this.ctx.stroke();
+      // Render weapon sprite
+      const weaponType = p.weapon || 'pistol';
+      this.renderWeaponSprite(p.x, p.y, p.angle, weaponType, isCurrentPlayer);
 
       // Player name bubble with nickname
       const nickname = p.nickname || (isCurrentPlayer ? 'Vous' : 'Joueur');
