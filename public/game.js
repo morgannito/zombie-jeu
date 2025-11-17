@@ -1050,6 +1050,11 @@ class PlayerController {
       this.input.mouse.x - canvasWidth / 2
     );
 
+    // Jouer le son de tir
+    if (window.onPlayerShoot) {
+      window.onPlayerShoot(player.x, player.y, angle, player.weapon || 'pistol');
+    }
+
     this.network.shoot(angle);
   }
 
