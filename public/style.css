@@ -1248,18 +1248,102 @@ body {
     font-size: 0.45rem;
   }
 
+  /* IMPROVED: More compact and readable HUD in landscape */
   #stats {
-    padding: 0.25rem 0.375rem;
-    font-size: 0.65rem;
+    padding: 0.2rem 0.3rem;
+    font-size: 0.6rem;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 0.375rem;
+    border-width: 1px;
+    max-width: 180px;
   }
 
   #player-name-display {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    margin-bottom: 0.2rem;
+  }
+
+  #health-bar,
+  #xp-bar {
+    width: 5rem;
+    height: 0.625rem;
+  }
+
+  #health-container,
+  #xp-container {
+    gap: 0.25rem;
     margin-bottom: 0.25rem;
   }
 
+  #health-text,
+  #xp-text,
+  #level-text {
+    font-size: 0.6rem;
+    min-width: 2rem;
+  }
+
+  #score,
+  #wave,
+  #weapon,
+  #players-online,
+  #zombies-alive {
+    margin-top: 0.15rem;
+    font-size: 0.55rem;
+    line-height: 1.2;
+  }
+
+  /* IMPROVED: Repositionable minimap in landscape */
   #minimap {
-    width: 55px;
-    height: 55px;
+    width: 50px;
+    height: 50px;
+    opacity: 0.7;
+    transition: all 0.3s ease, opacity 0.3s ease;
+  }
+
+  #minimap:hover {
+    opacity: 1;
+  }
+
+  /* Make settings button smaller in landscape */
+  #settings-btn {
+    width: 40px !important;
+    height: 40px !important;
+    font-size: 20px !important;
+    top: 5px !important;
+    right: 5px !important;
+  }
+
+  #immersive-mode-btn {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 18px !important;
+    top: 50px !important;
+    right: 5px !important;
+  }
+
+  #fps-counter {
+    top: 90px !important;
+    right: 5px !important;
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* IMPROVED: Better visibility in landscape for tablets */
+@media (min-width: 769px) and (max-width: 1024px) and (orientation: landscape) {
+  #stats {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  #health-bar,
+  #xp-bar {
+    width: 8rem;
+    height: 0.875rem;
+  }
+
+  #minimap {
+    width: 80px;
+    height: 80px;
   }
 }

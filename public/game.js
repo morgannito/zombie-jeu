@@ -1053,6 +1053,7 @@ class Renderer {
     this.minimapCanvas = minimapCanvas;
     this.minimapCtx = minimapCtx;
     this.camera = null;
+    this.performanceSettings = null; // Will be set by GameEngine
   }
 
   setCamera(camera) {
@@ -1125,6 +1126,11 @@ class Renderer {
   }
 
   renderGrid(config) {
+    // Check performance settings
+    if (window.performanceSettings && !window.performanceSettings.shouldRenderGrid()) {
+      return; // Skip grid rendering in performance mode
+    }
+
     this.ctx.strokeStyle = '#252541';
     this.ctx.lineWidth = 1;
 
@@ -1226,6 +1232,11 @@ class Renderer {
   }
 
   renderParticles(particles) {
+    // Check performance settings
+    if (window.performanceSettings && !window.performanceSettings.shouldRenderParticles()) {
+      return; // Skip particles rendering in performance mode
+    }
+
     Object.values(particles).forEach(particle => {
       this.ctx.fillStyle = particle.color;
       this.ctx.globalAlpha = 0.7;
@@ -2655,6 +2666,8 @@ class GameEngine {
     };
 
     this.animationFrameId = null; // Store requestAnimationFrame ID for cleanup
+    this.lastFrameTime = 0; // For FPS limiting
+    this.frameTimeAccumulator = 0; // For consistent frame timing
 
     this.setupCanvas();
     this.initializeManagers();
@@ -2679,13 +2692,19 @@ class GameEngine {
   }
 
   resizeCanvas() {
-    const pixelRatio = window.devicePixelRatio || 1;
+    const basePixelRatio = window.devicePixelRatio || 1;
+
+    // Apply performance settings resolution scale
+    const resolutionScale = window.performanceSettings ?
+      window.performanceSettings.getResolutionScale() : 1.0;
+
+    const pixelRatio = basePixelRatio * resolutionScale;
 
     // Set display size (CSS pixels)
     this.canvas.style.width = window.innerWidth + 'px';
     this.canvas.style.height = window.innerHeight + 'px';
 
-    // Set actual size in memory (scaled for Retina/high-DPI displays)
+    // Set actual size in memory (scaled for Retina/high-DPI displays + performance)
     this.canvas.width = window.innerWidth * pixelRatio;
     this.canvas.height = window.innerHeight * pixelRatio;
 
@@ -2696,8 +2715,8 @@ class GameEngine {
       const minimapSize = 200;
       this.renderer.minimapCanvas.style.width = minimapSize + 'px';
       this.renderer.minimapCanvas.style.height = minimapSize + 'px';
-      this.renderer.minimapCanvas.width = minimapSize * pixelRatio;
-      this.renderer.minimapCanvas.height = minimapSize * pixelRatio;
+      this.renderer.minimapCanvas.width = minimapSize * basePixelRatio;
+      this.renderer.minimapCanvas.height = minimapSize * basePixelRatio;
       // Minimap scaling is handled in renderMinimap()
     }
   }
@@ -2705,6 +2724,12 @@ class GameEngine {
   initializeManagers() {
     // Global game state
     window.gameState = new GameStateManager();
+
+    // Performance settings (must be initialized early)
+    if (typeof PerformanceSettingsManager !== 'undefined') {
+      window.performanceSettings = new PerformanceSettingsManager();
+      window.gameEngine = this; // Make engine accessible for performance settings
+    }
 
     // Managers
     window.inputManager = new InputManager();
@@ -2749,15 +2774,47 @@ class GameEngine {
     this.renderer.render(window.gameState, window.gameState.playerId);
   }
 
-  gameLoop() {
-    try {
-      this.update();
-      this.render();
-    } catch (error) {
-      console.error('Game loop error:', error);
-      // Continue the game loop even if there's an error
+  gameLoop(timestamp = 0) {
+    // FPS limiting based on performance settings
+    const targetFrameTime = window.performanceSettings ?
+      window.performanceSettings.getTargetFrameTime() : (1000 / 60);
+
+    const deltaTime = timestamp - this.lastFrameTime;
+
+    // Only update/render if enough time has passed
+    if (deltaTime >= targetFrameTime) {
+      try {
+        this.update();
+        this.render();
+
+        // Notify performance settings for FPS counting
+        if (window.performanceSettings) {
+          window.performanceSettings.onFrameRendered();
+        }
+      } catch (error) {
+        console.error('Game loop error:', error);
+        // Continue the game loop even if there's an error
+      }
+
+      this.lastFrameTime = timestamp - (deltaTime % targetFrameTime);
     }
-    this.animationFrameId = requestAnimationFrame(() => this.gameLoop());
+
+    this.animationFrameId = requestAnimationFrame((ts) => this.gameLoop(ts));
+  }
+
+  /**
+   * Called when performance settings change
+   */
+  onPerformanceSettingsChanged(settings) {
+    // Resize canvas with new resolution scale
+    this.resizeCanvas();
+
+    // Update renderer settings
+    if (this.renderer) {
+      this.renderer.performanceSettings = settings;
+    }
+
+    console.log('Performance settings updated in game engine:', settings);
   }
 
   start() {
