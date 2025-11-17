@@ -1389,6 +1389,45 @@ class Renderer {
       this.ctx.arc(0, 0, headRadius + 3, 0, Math.PI * 2);
       this.ctx.stroke();
       this.ctx.globalAlpha = 1;
+    } else if (zombie.type === 'shooter') {
+      // Fusil/Arme sur le zombie tireur
+      this.ctx.fillStyle = '#333';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 1;
+
+      // Arme à feu (fusil) - en position de tir
+      const gunLength = 15 * baseSize * scale;
+      const gunWidth = 3 * baseSize * scale;
+
+      // Position de l'arme (bras droit)
+      this.ctx.save();
+      this.ctx.translate(armOffset, 8 * baseSize * scale);
+
+      // Canon
+      this.ctx.fillRect(0, -gunWidth / 2, gunLength, gunWidth);
+      this.ctx.strokeRect(0, -gunWidth / 2, gunLength, gunWidth);
+
+      // Poignée
+      this.ctx.fillRect(-3 * baseSize * scale, -gunWidth / 2, 5 * baseSize * scale, 8 * baseSize * scale);
+      this.ctx.strokeRect(-3 * baseSize * scale, -gunWidth / 2, 5 * baseSize * scale, 8 * baseSize * scale);
+
+      // Point rouge sur le canon (visée laser)
+      this.ctx.fillStyle = '#ff3300';
+      this.ctx.beginPath();
+      this.ctx.arc(gunLength, 0, 2 * scale, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      this.ctx.restore();
+
+      // Bandana/Bandeau de munitions
+      this.ctx.strokeStyle = '#ffaa00';
+      this.ctx.lineWidth = 2;
+      this.ctx.globalAlpha = 0.8;
+      this.ctx.beginPath();
+      this.ctx.moveTo(-bodyWidth / 2, 2 * baseSize * scale);
+      this.ctx.lineTo(bodyWidth / 2, 2 * baseSize * scale);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 1;
     } else if (zombie.isBoss) {
       // Couronne/Crâne pour le boss
       this.ctx.fillStyle = '#ff0000';
