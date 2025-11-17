@@ -63,6 +63,10 @@ const CONFIG = {
   ROOMS_PER_RUN: 3
 };
 
+// Constantes pour la gestion des sessions
+const INACTIVITY_TIMEOUT = 120000; // 2 minutes d'inactivité avant déconnexion
+const HEARTBEAT_CHECK_INTERVAL = 15000; // Vérifier l'inactivité toutes les 15 secondes
+
 // Types d'armes (Améliorées pour un gameplay plus rapide)
 const WEAPONS = {
   pistol: {
@@ -1639,6 +1643,28 @@ setInterval(() => {
   });
 }, 1000 / 30);
 
+// Vérification périodique de l'inactivité des joueurs
+setInterval(() => {
+  const now = Date.now();
+
+  for (let playerId in gameState.players) {
+    const player = gameState.players[playerId];
+
+    // Vérifier si le joueur est inactif depuis trop longtemps
+    if (player.lastActivityTime && (now - player.lastActivityTime) > INACTIVITY_TIMEOUT) {
+      console.log(`[TIMEOUT] Player ${player.nickname || playerId} disconnected due to inactivity (${Math.round((now - player.lastActivityTime) / 1000)}s)`);
+
+      // Émettre un event de timeout au client
+      io.to(playerId).emit('sessionTimeout', {
+        reason: 'Inactivité détectée - Vous avez été déconnecté après 2 minutes sans activité'
+      });
+
+      // Supprimer le joueur
+      delete gameState.players[playerId];
+    }
+  }
+}, HEARTBEAT_CHECK_INTERVAL);
+
 // Gestion des connexions Socket.IO
 io.on('connection', (socket) => {
   console.log('Un joueur s\'est connecté:', socket.id);
@@ -1652,6 +1678,7 @@ io.on('connection', (socket) => {
     spawnProtectionEndTime: 0, // Fin de la protection
     invincible: false, // Invincibilité après upgrade
     invincibleEndTime: 0, // Fin de l'invincibilité
+    lastActivityTime: Date.now(), // Pour détecter l'inactivité
     x: CONFIG.ROOM_WIDTH / 2,
     y: CONFIG.ROOM_HEIGHT - 100,
     health: CONFIG.PLAYER_MAX_HEALTH,
@@ -1714,6 +1741,27 @@ io.on('connection', (socket) => {
     const newX = Math.max(0, Math.min(CONFIG.ROOM_WIDTH, data.x));
     const newY = Math.max(0, Math.min(CONFIG.ROOM_HEIGHT, data.y));
 
+    // VALIDATION: Vérifier la distance parcourue pour éviter la téléportation
+    const distance = Math.sqrt(
+      Math.pow(newX - player.x, 2) + Math.pow(newY - player.y, 2)
+    );
+
+    // Calculer la vitesse maximale autorisée
+    const speedMultiplier = player.speedMultiplier || 1;
+    const hasSpeedBoost = player.speedBoost && Date.now() < player.speedBoost;
+    const boostMultiplier = hasSpeedBoost ? 2 : 1;
+
+    // Distance max par frame (à 30 FPS avec tolérance pour latence)
+    const MAX_DISTANCE_PER_FRAME = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 1.5;
+
+    // Rejeter le mouvement si distance trop importante (tentative de téléportation)
+    if (distance > MAX_DISTANCE_PER_FRAME) {
+      console.warn(`[ANTI-CHEAT] Player ${player.nickname || socket.id} attempted teleport: ${Math.round(distance)}px (max: ${Math.round(MAX_DISTANCE_PER_FRAME)}px)`);
+      // Corriger la position du client
+      socket.emit('positionCorrection', { x: player.x, y: player.y });
+      return;
+    }
+
     // Vérifier collision avec les murs
     if (!checkWallCollision(newX, newY, CONFIG.PLAYER_SIZE)) {
       player.x = newX;
@@ -1721,6 +1769,9 @@ io.on('connection', (socket) => {
     }
 
     player.angle = data.angle;
+
+    // Mettre à jour le timestamp d'activité
+    player.lastActivityTime = Date.now();
 
     // MODE INFINI - Pas de portes ni de changements de salle
   });
@@ -1731,6 +1782,8 @@ io.on('connection', (socket) => {
     if (!player || !player.alive || !player.hasNickname) return; // Pas de tir sans pseudo
 
     const now = Date.now();
+    player.lastActivityTime = now; // Mettre à jour l'activité
+
     const weapon = WEAPONS[player.weapon] || WEAPONS.pistol;
 
     // Appliquer le multiplicateur de cadence de tir
@@ -1783,6 +1836,8 @@ io.on('connection', (socket) => {
   socket.on('respawn', () => {
     const player = gameState.players[socket.id];
     if (player) {
+      player.lastActivityTime = Date.now(); // Mettre à jour l'activité
+
       // Sauvegarder les upgrades permanents
       const savedUpgrades = { ...player.upgrades };
       const savedMultipliers = {
@@ -1833,6 +1888,8 @@ io.on('connection', (socket) => {
     const player = gameState.players[socket.id];
     if (!player || !player.alive) return;
 
+    player.lastActivityTime = Date.now(); // Mettre à jour l'activité
+
     const { upgradeId } = data;
     const upgrade = LEVEL_UP_UPGRADES[upgradeId];
 
@@ -1852,6 +1909,8 @@ io.on('connection', (socket) => {
   socket.on('buyItem', (data) => {
     const player = gameState.players[socket.id];
     if (!player || !player.alive) return;
+
+    player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
     const { itemId, category } = data;
 
@@ -1912,6 +1971,8 @@ io.on('connection', (socket) => {
     const player = gameState.players[socket.id];
     if (!player) return;
 
+    player.lastActivityTime = Date.now(); // Mettre à jour l'activité
+
     const nickname = data.nickname.trim().substring(0, 15); // Max 15 caractères
 
     if (nickname.length >= 2) {
@@ -1935,8 +1996,34 @@ io.on('connection', (socket) => {
     const player = gameState.players[socket.id];
     if (!player) return;
 
+    player.lastActivityTime = Date.now(); // Mettre à jour l'activité
+
     player.spawnProtection = false;
     console.log(`${player.nickname || socket.id} n'a plus de protection de spawn`);
+  });
+
+  // Ouverture du shop - activer l'invincibilité
+  socket.on('shopOpened', () => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    player.lastActivityTime = Date.now(); // Mettre à jour l'activité
+
+    player.invincible = true;
+    player.invincibleEndTime = Infinity; // Invincibilité sans limite de temps
+    console.log(`${player.nickname || socket.id} est invincible (shop ouvert)`);
+  });
+
+  // Fermeture du shop - désactiver l'invincibilité
+  socket.on('shopClosed', () => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    player.lastActivityTime = Date.now(); // Mettre à jour l'activité
+
+    player.invincible = false;
+    player.invincibleEndTime = 0;
+    console.log(`${player.nickname || socket.id} n'est plus invincible (shop fermé)`);
   });
 
   // Déconnexion du joueur

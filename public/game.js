@@ -903,6 +903,14 @@ class NetworkManager {
   buyItem(itemId, category) {
     this.socket.emit('buyItem', { itemId, category });
   }
+
+  shopOpened() {
+    this.socket.emit('shopOpened');
+  }
+
+  shopClosed() {
+    this.socket.emit('shopClosed');
+  }
 }
 
 /* ============================================
@@ -1041,6 +1049,11 @@ class PlayerController {
       this.input.mouse.y - canvasHeight / 2,
       this.input.mouse.x - canvasWidth / 2
     );
+
+    // Jouer le son de tir
+    if (window.onPlayerShoot) {
+      window.onPlayerShoot(player.x, player.y, angle, player.weapon || 'pistol');
+    }
 
     this.network.shoot(angle);
   }
@@ -2532,11 +2545,21 @@ class UIManager {
     this.shopOpen = true;
     document.getElementById('shop').style.display = 'block';
     this.populateShop();
+
+    // Activer l'invincibilité tant que le shop est ouvert
+    if (window.networkManager) {
+      window.networkManager.shopOpened();
+    }
   }
 
   hideShop() {
     this.shopOpen = false;
     document.getElementById('shop').style.display = 'none';
+
+    // Désactiver l'invincibilité quand le shop se ferme
+    if (window.networkManager) {
+      window.networkManager.shopClosed();
+    }
   }
 
   populateShop() {
