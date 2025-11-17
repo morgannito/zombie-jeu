@@ -1939,6 +1939,26 @@ io.on('connection', (socket) => {
     console.log(`${player.nickname || socket.id} n'a plus de protection de spawn`);
   });
 
+  // Ouverture du shop - activer l'invincibilité
+  socket.on('shopOpened', () => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    player.invincible = true;
+    player.invincibleEndTime = Infinity; // Invincibilité sans limite de temps
+    console.log(`${player.nickname || socket.id} est invincible (shop ouvert)`);
+  });
+
+  // Fermeture du shop - désactiver l'invincibilité
+  socket.on('shopClosed', () => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    player.invincible = false;
+    player.invincibleEndTime = 0;
+    console.log(`${player.nickname || socket.id} n'est plus invincible (shop fermé)`);
+  });
+
   // Déconnexion du joueur
   socket.on('disconnect', () => {
     console.log('Un joueur s\'est déconnecté:', socket.id);

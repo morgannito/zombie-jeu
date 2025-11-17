@@ -903,6 +903,14 @@ class NetworkManager {
   buyItem(itemId, category) {
     this.socket.emit('buyItem', { itemId, category });
   }
+
+  shopOpened() {
+    this.socket.emit('shopOpened');
+  }
+
+  shopClosed() {
+    this.socket.emit('shopClosed');
+  }
 }
 
 /* ============================================
@@ -2532,11 +2540,21 @@ class UIManager {
     this.shopOpen = true;
     document.getElementById('shop').style.display = 'block';
     this.populateShop();
+
+    // Activer l'invincibilité tant que le shop est ouvert
+    if (window.networkManager) {
+      window.networkManager.shopOpened();
+    }
   }
 
   hideShop() {
     this.shopOpen = false;
     document.getElementById('shop').style.display = 'none';
+
+    // Désactiver l'invincibilité quand le shop se ferme
+    if (window.networkManager) {
+      window.networkManager.shopClosed();
+    }
   }
 
   populateShop() {
