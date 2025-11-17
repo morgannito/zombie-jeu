@@ -108,6 +108,69 @@ const WEAPONS = {
     hasExplosion: true, // Les roquettes explosent toujours
     explosionRadius: 120, // Grand rayon d'explosion
     explosionDamage: 80 // Dégâts de zone
+  },
+  sniper: {
+    name: 'Sniper',
+    damage: 200, // Très haut dégât
+    fireRate: 1500, // Tir très lent (1.5 secondes)
+    bulletSpeed: 25, // Très rapide
+    bulletCount: 1,
+    spread: 0, // Parfaitement précis
+    color: '#0099ff',
+    bulletSize: 4, // Petite balle
+    piercing: 3 // Traverse jusqu'à 3 ennemis
+  },
+  flamethrower: {
+    name: 'Lance-Flammes',
+    damage: 15, // Faible dégât par tick
+    fireRate: 50, // Tir très rapide (quasi-continu)
+    bulletSpeed: 6, // Lent
+    bulletCount: 3, // Plusieurs flammes
+    spread: 0.4, // Large cône
+    color: '#ff6600',
+    bulletSize: 12, // Grosses flammes
+    lifetime: 400, // Les flammes disparaissent rapidement
+    isFlame: true
+  },
+  grenadelauncher: {
+    name: 'Lance-Grenades',
+    damage: 120, // Fort dégât d'impact
+    fireRate: 900, // Modéré (0.9 secondes)
+    bulletSpeed: 7, // Modéré
+    bulletCount: 1,
+    spread: 0,
+    color: '#228822',
+    bulletSize: 10,
+    hasExplosion: true,
+    explosionRadius: 150, // Très grand rayon
+    explosionDamage: 60, // Dégâts de zone modérés
+    isGrenade: true,
+    gravity: 0.15 // Arc de tir
+  },
+  laser: {
+    name: 'Laser',
+    damage: 50, // Dégât modéré
+    fireRate: 200, // Rapide (0.2 secondes)
+    bulletSpeed: 30, // Très rapide
+    bulletCount: 1,
+    spread: 0,
+    color: '#ff00ff',
+    bulletSize: 3,
+    piercing: 999, // Traverse tous les ennemis
+    isLaser: true
+  },
+  crossbow: {
+    name: 'Arbalète',
+    damage: 100, // Haut dégât de base
+    fireRate: 800, // Modéré (0.8 secondes)
+    bulletSpeed: 18, // Rapide
+    bulletCount: 1,
+    spread: 0,
+    color: '#8B4513',
+    bulletSize: 6,
+    criticalChance: 0.5, // 50% de chance de critique
+    criticalMultiplier: 3, // x3 dégâts en critique
+    isCrossbow: true
   }
 };
 
@@ -148,6 +211,46 @@ const POWERUP_TYPES = {
     color: '#ff0000',
     effect: (player) => {
       player.weapon = 'rocketlauncher';
+      player.weaponTimer = Date.now() + 15000; // 15 secondes
+    }
+  },
+  sniper: {
+    name: 'Sniper',
+    color: '#0099ff',
+    effect: (player) => {
+      player.weapon = 'sniper';
+      player.weaponTimer = Date.now() + 15000; // 15 secondes
+    }
+  },
+  flamethrower: {
+    name: 'Lance-Flammes',
+    color: '#ff6600',
+    effect: (player) => {
+      player.weapon = 'flamethrower';
+      player.weaponTimer = Date.now() + 15000; // 15 secondes
+    }
+  },
+  grenadelauncher: {
+    name: 'Lance-Grenades',
+    color: '#228822',
+    effect: (player) => {
+      player.weapon = 'grenadelauncher';
+      player.weaponTimer = Date.now() + 15000; // 15 secondes
+    }
+  },
+  laser: {
+    name: 'Laser',
+    color: '#ff00ff',
+    effect: (player) => {
+      player.weapon = 'laser';
+      player.weaponTimer = Date.now() + 15000; // 15 secondes
+    }
+  },
+  crossbow: {
+    name: 'Arbalète',
+    color: '#8B4513',
+    effect: (player) => {
+      player.weapon = 'crossbow';
       player.weaponTimer = Date.now() + 15000; // 15 secondes
     }
   }
@@ -733,11 +836,11 @@ function spawnSingleZombie() {
 
   const zombieId = gameState.nextZombieId++;
 
-  // Les zombies deviennent progressivement plus forts avec les vagues
-  const waveMultiplier = 1 + (gameState.wave - 1) * 0.08; // +8% par vague
+  // Les zombies deviennent progressivement plus forts avec les vagues (difficulté progressive améliorée)
+  const waveMultiplier = 1 + (gameState.wave - 1) * 0.10; // +10% par vague (augmenté de 8% à 10%)
   const zombieHealth = Math.floor(type.health * waveMultiplier);
   const zombieDamage = Math.floor(type.damage * waveMultiplier);
-  const zombieSpeed = Math.min(type.speed * (1 + (gameState.wave - 1) * 0.03), type.speed * 1.5); // +3% vitesse par vague, max +50%
+  const zombieSpeed = Math.min(type.speed * (1 + (gameState.wave - 1) * 0.04), type.speed * 1.8); // +4% vitesse par vague, max +80% (augmenté)
   const zombieGold = Math.floor(type.goldDrop * waveMultiplier);
   const zombieXP = Math.floor(type.xpDrop * waveMultiplier);
 
@@ -770,8 +873,8 @@ function spawnZombie() {
     return;
   }
 
-  // Limiter le spawn selon la vague actuelle - Progression agressive
-  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 5; // +5 zombies par vague (difficulté croissante)
+  // Limiter le spawn selon la vague actuelle - Progression agressive améliorée
+  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 7; // +7 zombies par vague (augmenté de 5 à 7)
 
   if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
     // Spawner le boss si pas encore fait
@@ -800,8 +903,8 @@ function spawnZombie() {
 function spawnBoss() {
   const type = ZOMBIE_TYPES.boss;
 
-  // Le boss devient plus fort à chaque vague
-  const waveMultiplier = 1 + (gameState.wave - 1) * 0.15; // +15% par vague
+  // Le boss devient plus fort à chaque vague (difficulté progressive améliorée)
+  const waveMultiplier = 1 + (gameState.wave - 1) * 0.20; // +20% par vague (augmenté de 15% à 20%)
   const bossHealth = Math.floor(type.health * waveMultiplier);
   const bossDamage = Math.floor(type.damage * waveMultiplier);
   const bossGold = Math.floor(type.goldDrop * waveMultiplier);
@@ -941,6 +1044,15 @@ function gameLoop() {
     // Retour à la vitesse normale si le boost a expiré
     if (player.speedBoost && now > player.speedBoost) {
       player.speedBoost = null;
+    }
+
+    // Réinitialiser le combo si le timeout est dépassé
+    const COMBO_TIMEOUT = 5000; // 5 secondes
+    if (player.combo > 0 && player.comboTimer > 0 && now - player.comboTimer > COMBO_TIMEOUT) {
+      player.combo = 0;
+      player.comboTimer = 0;
+      // Notifier le client que le combo est terminé
+      io.to(playerId).emit('comboReset');
     }
 
     // Régénération de vie
@@ -1260,6 +1372,17 @@ function gameLoop() {
     bullet.x += bullet.vx;
     bullet.y += bullet.vy;
 
+    // Appliquer la gravité pour les grenades
+    if (bullet.gravity && bullet.gravity > 0) {
+      bullet.vy += bullet.gravity;
+    }
+
+    // Vérifier le lifetime pour les flammes et autres armes à durée limitée
+    if (bullet.lifetime && now > bullet.lifetime) {
+      delete gameState.bullets[bulletId];
+      continue;
+    }
+
     // Retirer les balles hors de la salle ou qui touchent un mur
     if (bullet.x < 0 || bullet.x > CONFIG.ROOM_WIDTH ||
         bullet.y < 0 || bullet.y > CONFIG.ROOM_HEIGHT ||
@@ -1356,8 +1479,8 @@ function gameLoop() {
               const other = gameState.zombies[otherId];
               const dist = distance(zombie.x, zombie.y, other.x, other.y);
               if (dist < bullet.explosionRadius) {
-                // Les roquettes utilisent des dégâts fixes, les autres armes un pourcentage
-                const explosionDmg = bullet.isRocket ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
+                // Les armes avec explosion définie utilisent les dégâts fixes, sinon un pourcentage
+                const explosionDmg = bullet.rocketExplosionDamage > 0 ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
                 other.health -= explosionDmg;
                 // Créer des particules sur les zombies touchés
                 createParticles(other.x, other.y, other.color, 8);
@@ -1412,8 +1535,61 @@ function gameLoop() {
             }
           }
 
-          // Créer du loot
-          createLoot(zombie.x, zombie.y, zombie.goldDrop, zombie.xpDrop);
+          // Créer du loot avec bonus de combo
+          let goldBonus = zombie.goldDrop;
+          let xpBonus = zombie.xpDrop;
+
+          // Mettre à jour le combo et le score du joueur
+          if (bullet.playerId) {
+            const shooter = gameState.players[bullet.playerId];
+            if (shooter && shooter.alive) {
+              const now = Date.now();
+              const COMBO_TIMEOUT = 5000; // 5 secondes pour maintenir le combo
+
+              // Reset ou continue le combo
+              if (shooter.comboTimer > 0 && now - shooter.comboTimer < COMBO_TIMEOUT) {
+                shooter.combo++;
+              } else {
+                shooter.combo = 1;
+              }
+
+              shooter.comboTimer = now;
+              shooter.kills++;
+              shooter.zombiesKilled++;
+
+              // Mettre à jour le meilleur combo
+              if (shooter.combo > shooter.highestCombo) {
+                shooter.highestCombo = shooter.combo;
+              }
+
+              // Calculer le multiplicateur de combo
+              let comboMultiplier = 1;
+              if (shooter.combo >= 50) comboMultiplier = 10;
+              else if (shooter.combo >= 30) comboMultiplier = 5;
+              else if (shooter.combo >= 15) comboMultiplier = 3;
+              else if (shooter.combo >= 5) comboMultiplier = 2;
+
+              // Appliquer le bonus de combo sur l'or et l'XP
+              goldBonus = Math.floor(zombie.goldDrop * comboMultiplier);
+              xpBonus = Math.floor(zombie.xpDrop * comboMultiplier);
+
+              // Calculer le score (base + combo bonus)
+              const baseScore = zombie.goldDrop + zombie.xpDrop;
+              const comboScore = baseScore * (comboMultiplier - 1);
+              shooter.totalScore += baseScore + comboScore;
+
+              // Émettre l'événement de combo pour l'affichage visuel
+              io.to(bullet.playerId).emit('comboUpdate', {
+                combo: shooter.combo,
+                multiplier: comboMultiplier,
+                score: shooter.totalScore,
+                goldBonus: goldBonus - zombie.goldDrop,
+                xpBonus: xpBonus - zombie.xpDrop
+              });
+            }
+          }
+
+          createLoot(zombie.x, zombie.y, goldBonus, xpBonus);
 
           // Supprimer le zombie
           delete gameState.zombies[zombieId];
@@ -1434,7 +1610,7 @@ function gameLoop() {
             // Notifier tous les joueurs de la nouvelle vague
             io.emit('newWave', {
               wave: gameState.wave,
-              zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 5 // Mis à jour pour correspondre à la nouvelle progression
+              zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 7 // Mis à jour pour correspondre à la nouvelle progression améliorée
             });
 
             // Bonus de santé pour les joueurs survivants
@@ -1693,6 +1869,14 @@ io.on('connection', (socket) => {
     lastShot: 0,
     speedBoost: null,
     weaponTimer: null,
+    // Système de combos et score
+    kills: 0,
+    zombiesKilled: 0,
+    combo: 0,
+    comboTimer: 0,
+    highestCombo: 0,
+    totalScore: 0,
+    survivalTime: Date.now(),
     // Upgrades permanents (shop)
     upgrades: {
       maxHealth: 0,
@@ -1805,11 +1989,16 @@ io.on('connection', (socket) => {
       // Appliquer le multiplicateur de dégâts
       let damage = weapon.damage * (player.damageMultiplier || 1);
 
-      // Critique
-      const isCritical = Math.random() < (player.criticalChance || 0);
+      // Critique (chance de base + chance de l'arme)
+      const totalCritChance = (player.criticalChance || 0) + (weapon.criticalChance || 0);
+      const isCritical = Math.random() < totalCritChance;
       if (isCritical) {
-        damage *= 2;
+        const critMultiplier = weapon.criticalMultiplier || 2;
+        damage *= critMultiplier;
       }
+
+      // Piercing (de base + piercing de l'arme)
+      const totalPiercing = (player.bulletPiercing || 0) + (weapon.piercing || 0);
 
       gameState.bullets[bulletId] = {
         id: bulletId,
@@ -1821,13 +2010,21 @@ io.on('connection', (socket) => {
         damage: damage,
         color: isCritical ? '#ff0000' : weapon.color,
         size: weapon.bulletSize || CONFIG.BULLET_SIZE,
-        piercing: player.bulletPiercing || 0,
+        piercing: totalPiercing,
         piercedZombies: [],
         explosiveRounds: player.explosiveRounds || weapon.hasExplosion || false,
         explosionRadius: weapon.hasExplosion ? weapon.explosionRadius : (player.explosionRadius || 0),
-        explosionDamagePercent: weapon.hasExplosion ? 1 : (player.explosionDamagePercent || 0), // 100% pour les roquettes
+        explosionDamagePercent: weapon.hasExplosion ? 1 : (player.explosionDamagePercent || 0),
         rocketExplosionDamage: weapon.hasExplosion ? weapon.explosionDamage : 0,
-        isRocket: weapon.hasExplosion || false
+        isRocket: weapon.hasExplosion && !weapon.isGrenade || false,
+        // Propriétés spéciales des nouvelles armes
+        isFlame: weapon.isFlame || false,
+        isLaser: weapon.isLaser || false,
+        isGrenade: weapon.isGrenade || false,
+        isCrossbow: weapon.isCrossbow || false,
+        gravity: weapon.gravity || 0,
+        lifetime: weapon.lifetime ? now + weapon.lifetime : null,
+        createdAt: now
       };
     }
   });

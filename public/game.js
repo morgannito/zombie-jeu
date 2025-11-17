@@ -777,6 +777,346 @@ class CameraManager {
 }
 
 /* ============================================
+   COMBO SYSTEM
+   ============================================ */
+
+class ComboSystem {
+  constructor() {
+    this.combo = 0;
+    this.multiplier = 1;
+    this.score = 0;
+    this.displayCombo = 0; // Pour l'animation
+    this.comboElement = null;
+    this.scoreElement = null;
+    this.createUI();
+  }
+
+  createUI() {
+    // Créer l'élément d'affichage du combo
+    this.comboElement = document.createElement('div');
+    this.comboElement.id = 'combo-display';
+    this.comboElement.style.cssText = `
+      position: fixed;
+      top: 120px;
+      right: 20px;
+      background: rgba(255, 100, 0, 0.9);
+      padding: 15px 25px;
+      border-radius: 10px;
+      font-size: 32px;
+      font-weight: bold;
+      color: white;
+      text-align: center;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 0 20px rgba(255, 100, 0, 0.5);
+      border: 3px solid rgba(255, 150, 0, 0.8);
+      transform: scale(1);
+      transition: transform 0.2s ease;
+    `;
+    document.body.appendChild(this.comboElement);
+
+    // Créer l'élément d'affichage du score
+    this.scoreElement = document.createElement('div');
+    this.scoreElement.id = 'score-display';
+    this.scoreElement.style.cssText = `
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      background: rgba(30, 30, 60, 0.9);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 20px;
+      font-weight: bold;
+      color: #FFD700;
+      z-index: 1000;
+      border: 2px solid rgba(255, 215, 0, 0.5);
+    `;
+    this.scoreElement.innerHTML = '🏆 Score: 0';
+    document.body.appendChild(this.scoreElement);
+  }
+
+  updateCombo(data) {
+    this.combo = data.combo;
+    this.multiplier = data.multiplier;
+    this.score = data.score;
+
+    // Afficher le combo
+    if (this.combo > 1) {
+      this.comboElement.style.display = 'block';
+
+      // Couleur selon le multiplicateur
+      let color = '#ff6400';
+      if (this.multiplier >= 10) color = '#ff0000';
+      else if (this.multiplier >= 5) color = '#ff3300';
+      else if (this.multiplier >= 3) color = '#ff5500';
+
+      this.comboElement.style.background = `rgba(${parseInt(color.slice(1,3), 16)}, ${parseInt(color.slice(3,5), 16)}, ${parseInt(color.slice(5,7), 16)}, 0.9)`;
+      this.comboElement.style.boxShadow = `0 0 30px ${color}`;
+
+      let comboText = `${this.combo} COMBO`;
+      if (this.multiplier > 1) {
+        comboText += `<br><span style="font-size: 24px; color: #FFD700;">x${this.multiplier} MULTIPLICATEUR</span>`;
+      }
+
+      this.comboElement.innerHTML = comboText;
+
+      // Animation de pulsation
+      this.comboElement.style.transform = 'scale(1.2)';
+      setTimeout(() => {
+        if (this.comboElement) {
+          this.comboElement.style.transform = 'scale(1)';
+        }
+      }, 200);
+
+      // Animation bonus pour les gros combos (tous les 10 kills)
+      if (this.combo % 10 === 0) {
+        this.comboElement.style.fontSize = '40px';
+        setTimeout(() => {
+          if (this.comboElement) {
+            this.comboElement.style.fontSize = '32px';
+          }
+        }, 300);
+      }
+    }
+
+    // Mettre à jour le score
+    this.scoreElement.innerHTML = `🏆 Score: ${this.score.toLocaleString()}`;
+  }
+
+  resetCombo() {
+    this.combo = 0;
+    this.multiplier = 1;
+
+    // Cacher l'affichage du combo avec animation
+    if (this.comboElement) {
+      this.comboElement.style.transform = 'scale(0.5)';
+      this.comboElement.style.opacity = '0';
+      setTimeout(() => {
+        if (this.comboElement) {
+          this.comboElement.style.display = 'none';
+          this.comboElement.style.transform = 'scale(1)';
+          this.comboElement.style.opacity = '1';
+        }
+      }, 300);
+    }
+  }
+}
+
+/* ============================================
+   LEADERBOARD SYSTEM
+   ============================================ */
+
+class LeaderboardSystem {
+  constructor() {
+    this.leaderboard = this.loadLeaderboard();
+    this.createUI();
+  }
+
+  loadLeaderboard() {
+    const saved = localStorage.getItem('zombieGameLeaderboard');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return {
+      highestScore: 0,
+      mostKills: 0,
+      mostGold: 0,
+      longestSurvival: 0,
+      entries: []
+    };
+  }
+
+  saveLeaderboard() {
+    localStorage.setItem('zombieGameLeaderboard', JSON.stringify(this.leaderboard));
+  }
+
+  addEntry(player) {
+    if (player && player.alive === false) {
+      const survivalTime = player.survivalTime ? Math.floor((Date.now() - player.survivalTime) / 1000) : 0;
+
+      const entry = {
+        nickname: player.nickname || 'Anonyme',
+        score: player.totalScore || player.score || 0,
+        kills: player.zombiesKilled || player.kills || 0,
+        gold: player.gold || 0,
+        survivalTime: survivalTime,
+        date: new Date().toISOString(),
+        wave: window.gameState?.state?.wave || 1
+      };
+
+      // Mettre à jour les records
+      if (entry.score > this.leaderboard.highestScore) {
+        this.leaderboard.highestScore = entry.score;
+      }
+      if (entry.kills > this.leaderboard.mostKills) {
+        this.leaderboard.mostKills = entry.kills;
+      }
+      if (entry.gold > this.leaderboard.mostGold) {
+        this.leaderboard.mostGold = entry.gold;
+      }
+      if (survivalTime > this.leaderboard.longestSurvival) {
+        this.leaderboard.longestSurvival = survivalTime;
+      }
+
+      // Ajouter l'entrée
+      this.leaderboard.entries.push(entry);
+
+      // Garder seulement les 10 meilleures entrées
+      this.leaderboard.entries.sort((a, b) => b.score - a.score);
+      this.leaderboard.entries = this.leaderboard.entries.slice(0, 10);
+
+      this.saveLeaderboard();
+      this.updateUI();
+    }
+  }
+
+  createUI() {
+    // Créer le bouton pour afficher le leaderboard
+    const btn = document.createElement('button');
+    btn.id = 'leaderboard-btn';
+    btn.innerHTML = '🏆 Classement';
+    btn.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      background: rgba(255, 215, 0, 0.9);
+      border: 2px solid #FFD700;
+      border-radius: 8px;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 1000;
+      font-size: 16px;
+    `;
+    btn.onclick = () => this.toggleLeaderboard();
+    document.body.appendChild(btn);
+
+    // Créer le panneau du leaderboard
+    const panel = document.createElement('div');
+    panel.id = 'leaderboard-panel';
+    panel.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      max-height: 80vh;
+      background: rgba(20, 20, 40, 0.95);
+      border: 3px solid #FFD700;
+      border-radius: 15px;
+      padding: 20px;
+      z-index: 2000;
+      display: none;
+      overflow-y: auto;
+      box-shadow: 0 0 50px rgba(255, 215, 0, 0.5);
+    `;
+    panel.innerHTML = `
+      <h2 style="color: #FFD700; text-align: center; margin-top: 0;">🏆 CLASSEMENT 🏆</h2>
+      <div id="leaderboard-records" style="margin-bottom: 20px;"></div>
+      <div id="leaderboard-content"></div>
+      <button id="close-leaderboard" style="
+        width: 100%;
+        padding: 10px;
+        margin-top: 20px;
+        background: #ff4444;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 16px;
+      ">Fermer</button>
+    `;
+    document.body.appendChild(panel);
+
+    document.getElementById('close-leaderboard').onclick = () => this.toggleLeaderboard();
+
+    this.updateUI();
+  }
+
+  toggleLeaderboard() {
+    const panel = document.getElementById('leaderboard-panel');
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      this.updateUI();
+    } else {
+      panel.style.display = 'none';
+    }
+  }
+
+  updateUI() {
+    const recordsDiv = document.getElementById('leaderboard-records');
+    const contentDiv = document.getElementById('leaderboard-content');
+
+    if (!recordsDiv || !contentDiv) return;
+
+    // Afficher les records
+    recordsDiv.innerHTML = `
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+        <div style="background: rgba(255, 215, 0, 0.2); padding: 10px; border-radius: 5px; text-align: center;">
+          <div style="color: #FFD700; font-size: 24px; font-weight: bold;">${this.leaderboard.highestScore.toLocaleString()}</div>
+          <div style="color: #ccc; font-size: 14px;">Meilleur Score</div>
+        </div>
+        <div style="background: rgba(255, 100, 100, 0.2); padding: 10px; border-radius: 5px; text-align: center;">
+          <div style="color: #ff6464; font-size: 24px; font-weight: bold;">${this.leaderboard.mostKills.toLocaleString()}</div>
+          <div style="color: #ccc; font-size: 14px;">Record de Kills</div>
+        </div>
+        <div style="background: rgba(100, 255, 100, 0.2); padding: 10px; border-radius: 5px; text-align: center;">
+          <div style="color: #64ff64; font-size: 24px; font-weight: bold;">${this.leaderboard.mostGold.toLocaleString()}</div>
+          <div style="color: #ccc; font-size: 14px;">Plus d'Or</div>
+        </div>
+        <div style="background: rgba(100, 100, 255, 0.2); padding: 10px; border-radius: 5px; text-align: center;">
+          <div style="color: #6464ff; font-size: 24px; font-weight: bold;">${this.formatTime(this.leaderboard.longestSurvival)}</div>
+          <div style="color: #ccc; font-size: 14px;">Temps de Survie</div>
+        </div>
+      </div>
+    `;
+
+    // Afficher le top 10
+    if (this.leaderboard.entries.length === 0) {
+      contentDiv.innerHTML = '<p style="color: #ccc; text-align: center;">Aucune partie jouée</p>';
+      return;
+    }
+
+    let html = '<table style="width: 100%; color: white; border-collapse: collapse;">';
+    html += `
+      <tr style="background: rgba(255, 215, 0, 0.2); border-bottom: 2px solid #FFD700;">
+        <th style="padding: 10px; text-align: left;">Rang</th>
+        <th style="padding: 10px; text-align: left;">Joueur</th>
+        <th style="padding: 10px; text-align: center;">Score</th>
+        <th style="padding: 10px; text-align: center;">Kills</th>
+        <th style="padding: 10px; text-align: center;">Vague</th>
+      </tr>
+    `;
+
+    this.leaderboard.entries.forEach((entry, index) => {
+      const rankColor = index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : '#fff';
+      const rankIcon = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : (index + 1);
+
+      html += `
+        <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+          <td style="padding: 10px; color: ${rankColor}; font-weight: bold;">${rankIcon}</td>
+          <td style="padding: 10px;">${entry.nickname}</td>
+          <td style="padding: 10px; text-align: center; color: #FFD700;">${entry.score.toLocaleString()}</td>
+          <td style="padding: 10px; text-align: center; color: #ff6464;">${entry.kills}</td>
+          <td style="padding: 10px; text-align: center; color: #64ff64;">Vague ${entry.wave}</td>
+        </tr>
+      `;
+    });
+
+    html += '</table>';
+    contentDiv.innerHTML = html;
+  }
+
+  formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+}
+
+/* ============================================
    NETWORK MANAGER
    ============================================ */
 
@@ -796,6 +1136,8 @@ class NetworkManager {
     this.socket.on('runCompleted', (data) => this.handleRunCompleted(data));
     this.socket.on('upgradeSelected', (data) => this.handleUpgradeSelected(data));
     this.socket.on('shopUpdate', (data) => this.handleShopUpdate(data));
+    this.socket.on('comboUpdate', (data) => this.handleComboUpdate(data));
+    this.socket.on('comboReset', () => this.handleComboReset());
   }
 
   handleInit(data) {
@@ -872,6 +1214,18 @@ class NetworkManager {
   handleShopUpdate(data) {
     if (data.success && window.gameUI && window.gameUI.shopOpen) {
       window.gameUI.populateShop();
+    }
+  }
+
+  handleComboUpdate(data) {
+    if (window.comboSystem) {
+      window.comboSystem.updateCombo(data);
+    }
+  }
+
+  handleComboReset() {
+    if (window.comboSystem) {
+      window.comboSystem.resetCombo();
     }
   }
 
@@ -2420,8 +2774,17 @@ class UIManager {
     // Game over
     if (!player.alive) {
       document.getElementById('game-over').style.display = 'block';
-      document.getElementById('final-score').textContent = player.score;
+      document.getElementById('final-score').textContent = player.totalScore || player.score || 0;
       document.getElementById('final-wave').textContent = `${this.gameState.state.wave || 1}`;
+
+      // Sauvegarder dans le leaderboard (une seule fois)
+      if (!this.deathRecorded && window.leaderboardSystem) {
+        this.deathRecorded = true;
+        window.leaderboardSystem.addEntry(player);
+      }
+    } else {
+      // Réinitialiser le flag quand le joueur est vivant
+      this.deathRecorded = false;
     }
 
     // Player count
@@ -2989,6 +3352,8 @@ class GameEngine {
     window.networkManager = new NetworkManager(io());
     window.gameUI = new UIManager(window.gameState);
     window.audioManager = new AudioManager(); // Audio feedback
+    window.comboSystem = new ComboSystem(); // Système de combos
+    window.leaderboardSystem = new LeaderboardSystem(); // Système de classement
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
