@@ -1195,7 +1195,8 @@ class Renderer {
         health: '+',
         speed: '»',
         shotgun: 'S',
-        machinegun: 'M'
+        machinegun: 'M',
+        rocketlauncher: 'R'
       };
 
       this.ctx.fillText(symbols[powerup.type] || '?', powerup.x, powerup.y);
@@ -1270,11 +1271,12 @@ class Renderer {
 
   renderBullets(bullets, config) {
     Object.values(bullets).forEach(bullet => {
+      const bulletSize = bullet.size || config.BULLET_SIZE;
       this.ctx.fillStyle = bullet.color || '#ffff00';
       this.ctx.shadowBlur = 10;
       this.ctx.shadowColor = bullet.color || '#ffff00';
       this.ctx.beginPath();
-      this.ctx.arc(bullet.x, bullet.y, config.BULLET_SIZE, 0, Math.PI * 2);
+      this.ctx.arc(bullet.x, bullet.y, bulletSize, 0, Math.PI * 2);
       this.ctx.fill();
       this.ctx.shadowBlur = 0;
     });
@@ -1763,6 +1765,76 @@ class Renderer {
         this.ctx.fillStyle = accentColor;
         this.ctx.fillRect(5, -3, 2, 6);
         this.ctx.fillRect(20, -3, 2, 6);
+        break;
+
+      case 'rocketlauncher':
+        // Lance-roquettes imposant
+        // Tube principal (large)
+        this.ctx.fillStyle = '#444';
+        this.ctx.fillRect(0, -7, 40, 14);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.strokeRect(0, -7, 40, 14);
+
+        // Bandes de sécurité jaunes/noires
+        for(let i = 0; i < 3; i++) {
+          this.ctx.fillStyle = i % 2 === 0 ? '#ffff00' : '#000';
+          this.ctx.fillRect(8 + i * 8, -6, 6, 12);
+        }
+
+        // Tube de visée supérieur
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(5, -10, 30, 3);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -10, 30, 3);
+
+        // Ouverture avant (tube de lancement)
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(40, -6, 8, 12);
+        this.ctx.strokeRect(40, -6, 8, 12);
+
+        // Bordure du tube de lancement
+        this.ctx.fillStyle = '#ff4400';
+        this.ctx.fillRect(40, -7, 2, 14);
+        this.ctx.fillRect(46, -7, 2, 14);
+
+        // Poignée avant
+        this.ctx.fillStyle = '#333';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(15, 7);
+        this.ctx.lineTo(15, 12);
+        this.ctx.lineTo(20, 12);
+        this.ctx.lineTo(20, 7);
+        this.ctx.stroke();
+
+        // Gâchette arrière
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(-3, 2, 5, 10);
+        this.ctx.strokeRect(-3, 2, 5, 10);
+
+        // Détails rouges (danger)
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.fillRect(38, -8, 3, 2);
+        this.ctx.fillRect(38, 6, 3, 2);
+
+        // Indicateur LED (prêt à tirer)
+        this.ctx.fillStyle = '#00ff00';
+        this.ctx.beginPath();
+        this.ctx.arc(10, 0, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Évents de recul
+        this.ctx.fillStyle = '#666';
+        for(let i = 0; i < 3; i++) {
+          this.ctx.fillRect(-8 - i * 3, -4 + i * 2, 5, 2);
+        }
+
+        // Détails accent
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(2, -5, 3, 10);
         break;
 
       default:

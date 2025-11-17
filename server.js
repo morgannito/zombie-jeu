@@ -89,6 +89,16 @@ const WEAPONS = {
     bulletCount: 1,
     spread: 0.08,
     color: '#00ffff'
+  },
+  rocketlauncher: {
+    name: 'Lance-Roquettes',
+    damage: 150, // Très fort dégâts
+    fireRate: 1200, // Tir lent (1.2 secondes)
+    bulletSpeed: 8, // Projectile lent
+    bulletCount: 1,
+    spread: 0,
+    color: '#ff0000',
+    bulletSize: 8 // Roquettes plus grosses
   }
 };
 
@@ -121,6 +131,14 @@ const POWERUP_TYPES = {
     color: '#00ffff',
     effect: (player) => {
       player.weapon = 'machinegun';
+      player.weaponTimer = Date.now() + 15000; // 15 secondes
+    }
+  },
+  rocketlauncher: {
+    name: 'Lance-Roquettes',
+    color: '#ff0000',
+    effect: (player) => {
+      player.weapon = 'rocketlauncher';
       player.weaponTimer = Date.now() + 15000; // 15 secondes
     }
   }
@@ -457,6 +475,16 @@ const SHOP_ITEMS = {
       cost: 50,
       effect: (player) => {
         player.weapon = 'machinegun';
+        player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
+      }
+    },
+    rocketlauncher: {
+      id: 'rocketlauncher',
+      name: '🚀 Lance-Roquettes',
+      description: 'Lance-roquettes dévastateur pour la salle actuelle',
+      cost: 75,
+      effect: (player) => {
+        player.weapon = 'rocketlauncher';
         player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
       }
     },
@@ -1686,6 +1714,7 @@ io.on('connection', (socket) => {
         playerId: socket.id,
         damage: damage,
         color: isCritical ? '#ff0000' : weapon.color,
+        size: weapon.bulletSize || CONFIG.BULLET_SIZE,
         piercing: player.bulletPiercing || 0,
         piercedZombies: [],
         explosiveRounds: player.explosiveRounds || false,
