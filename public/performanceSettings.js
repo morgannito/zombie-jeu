@@ -18,7 +18,8 @@ class PerformanceSettingsManager {
       gridEnabled: true,
       shadowsEnabled: true,
       immersiveMode: false, // Hide non-essential UI
-      minimapPosition: 'right' // 'right', 'left', 'hidden'
+      minimapPosition: 'right', // 'right', 'left', 'hidden'
+      fullscreenEnabled: false // Fullscreen mode
     };
 
     this.currentFPS = 60;
@@ -106,6 +107,12 @@ class PerformanceSettingsManager {
 
     // Immersive mode toggle button (for mobile)
     this.createImmersiveModeButton();
+
+    // Fullscreen toggle button
+    this.createFullscreenButton();
+
+    // Listen for fullscreen changes (e.g., when user presses ESC)
+    this.setupFullscreenListeners();
   }
 
   /**
@@ -191,7 +198,17 @@ class PerformanceSettingsManager {
       </div>
 
       <div class="settings-section" style="margin-top: 20px;">
-        <h3 style="color: #ffd700; font-size: 18px; margin-bottom: 15px;">📱 Interface Mobile</h3>
+        <h3 style="color: #ffd700; font-size: 18px; margin-bottom: 15px;">🖥️ Affichage</h3>
+
+        <div class="setting-item">
+          <label style="color: #fff; display: block; margin-bottom: 10px;">
+            <input type="checkbox" id="fullscreen-checkbox" ${this.settings.fullscreenEnabled ? 'checked' : ''}>
+            Mode Plein Écran
+          </label>
+          <p style="color: #aaa; font-size: 12px; margin: 0 0 15px 0;">
+            Lance le jeu en plein écran pour une meilleure immersion
+          </p>
+        </div>
 
         <div class="setting-item">
           <label style="color: #fff; display: block; margin-bottom: 10px;">
@@ -366,6 +383,104 @@ class PerformanceSettingsManager {
   }
 
   /**
+   * Create fullscreen toggle button
+   */
+  createFullscreenButton() {
+    const btn = document.createElement('button');
+    btn.id = 'fullscreen-btn';
+    btn.innerHTML = '⛶';
+    btn.title = 'Basculer en plein écran (F11)';
+    btn.style.cssText = `
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid #ff6b00;
+      border-radius: 8px;
+      width: 45px;
+      height: 45px;
+      font-size: 22px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+    `;
+
+    btn.addEventListener('mouseenter', () => {
+      btn.style.transform = 'scale(1.1)';
+      btn.style.boxShadow = '0 0 20px rgba(255, 107, 0, 0.5)';
+    });
+
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = 'scale(1)';
+      btn.style.boxShadow = 'none';
+    });
+
+    btn.addEventListener('click', () => {
+      this.toggleFullscreen();
+      this.updateFullscreenButton();
+    });
+
+    document.body.appendChild(btn);
+
+    // Apply initial state
+    this.updateFullscreenButton();
+  }
+
+  /**
+   * Update fullscreen button appearance
+   */
+  updateFullscreenButton() {
+    const btn = document.getElementById('fullscreen-btn');
+    if (!btn) return;
+
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+
+    if (isFullscreen) {
+      btn.innerHTML = '⛶';
+      btn.title = 'Quitter le plein écran (ESC)';
+      btn.style.background = 'rgba(255, 107, 0, 0.3)';
+      btn.style.borderColor = '#ff6b00';
+    } else {
+      btn.innerHTML = '⛶';
+      btn.title = 'Basculer en plein écran';
+      btn.style.background = 'rgba(0, 0, 0, 0.8)';
+      btn.style.borderColor = '#ff6b00';
+    }
+  }
+
+  /**
+   * Setup fullscreen event listeners
+   */
+  setupFullscreenListeners() {
+    // Handle fullscreen changes (e.g., when user presses ESC)
+    const handleFullscreenChange = () => {
+      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+
+      this.settings.fullscreenEnabled = isFullscreen;
+      this.saveSettings();
+      this.updateFullscreenButton();
+
+      // Update checkbox if panel is open
+      const checkbox = document.getElementById('fullscreen-checkbox');
+      if (checkbox) {
+        checkbox.checked = isFullscreen;
+      }
+
+      // Resize canvas when entering/exiting fullscreen
+      if (window.gameEngine) {
+        setTimeout(() => {
+          window.gameEngine.resizeCanvas();
+        }, 100);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
+    document.addEventListener('msfullscreenchange', handleFullscreenChange); // IE11
+  }
+
+  /**
    * Toggle settings panel
    */
   toggleSettingsPanel() {
@@ -400,6 +515,7 @@ class PerformanceSettingsManager {
     const immersiveMode = document.getElementById('immersive-mode-checkbox').checked;
     const minimapPosition = document.getElementById('minimap-position-select').value;
     const autoAdjust = document.getElementById('auto-adjust-checkbox').checked;
+    const fullscreenEnabled = document.getElementById('fullscreen-checkbox').checked;
 
     this.settings = {
       performanceMode: perfMode,
@@ -409,7 +525,8 @@ class PerformanceSettingsManager {
       gridEnabled,
       shadowsEnabled: this.settings.shadowsEnabled,
       immersiveMode,
-      minimapPosition
+      minimapPosition,
+      fullscreenEnabled
     };
 
     this.autoAdjust = autoAdjust;
@@ -427,6 +544,9 @@ class PerformanceSettingsManager {
 
     // Apply minimap position
     this.applyMinimapPosition();
+
+    // Apply fullscreen mode
+    this.applyFullscreen();
 
     // Notify game of settings change
     if (window.gameEngine) {
@@ -503,6 +623,70 @@ class PerformanceSettingsManager {
         minimap.style.right = '0.5rem';
         minimap.style.left = 'auto';
       }
+    }
+  }
+
+  /**
+   * Apply fullscreen mode
+   */
+  applyFullscreen() {
+    if (this.settings.fullscreenEnabled) {
+      this.enterFullscreen();
+    } else {
+      this.exitFullscreen();
+    }
+  }
+
+  /**
+   * Enter fullscreen mode
+   */
+  enterFullscreen() {
+    const elem = document.documentElement;
+
+    if (!document.fullscreenElement) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(err => {
+          console.warn('Failed to enter fullscreen:', err);
+          this.settings.fullscreenEnabled = false;
+        });
+      } else if (elem.webkitRequestFullscreen) { // Safari
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { // IE11
+        elem.msRequestFullscreen();
+      } else {
+        console.warn('Fullscreen API not supported');
+        this.settings.fullscreenEnabled = false;
+      }
+    }
+  }
+
+  /**
+   * Exit fullscreen mode
+   */
+  exitFullscreen() {
+    if (document.fullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) { // Safari
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) { // IE11
+        document.msExitFullscreen();
+      }
+    }
+  }
+
+  /**
+   * Toggle fullscreen mode
+   */
+  toggleFullscreen() {
+    this.settings.fullscreenEnabled = !this.settings.fullscreenEnabled;
+    this.applyFullscreen();
+    this.saveSettings();
+
+    // Update checkbox if panel is open
+    const checkbox = document.getElementById('fullscreen-checkbox');
+    if (checkbox) {
+      checkbox.checked = this.settings.fullscreenEnabled;
     }
   }
 
