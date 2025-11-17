@@ -18,7 +18,10 @@ class PerformanceSettingsManager {
       gridEnabled: true,
       shadowsEnabled: true,
       immersiveMode: false, // Hide non-essential UI
-      minimapPosition: 'right' // 'right', 'left', 'hidden'
+      minimapPosition: 'right', // 'right', 'left', 'hidden'
+      fullscreenEnabled: false, // Fullscreen mode
+      minimapSize: 'medium', // 'small', 'medium', 'large' (mobile only)
+      minimapOpacity: 0.8 // 0.3 to 1.0
     };
 
     this.currentFPS = 60;
@@ -106,6 +109,15 @@ class PerformanceSettingsManager {
 
     // Immersive mode toggle button (for mobile)
     this.createImmersiveModeButton();
+
+    // Fullscreen toggle button
+    this.createFullscreenButton();
+
+    // Minimap toggle button (for mobile)
+    this.createMinimapToggleButton();
+
+    // Listen for fullscreen changes (e.g., when user presses ESC)
+    this.setupFullscreenListeners();
   }
 
   /**
@@ -191,7 +203,17 @@ class PerformanceSettingsManager {
       </div>
 
       <div class="settings-section" style="margin-top: 20px;">
-        <h3 style="color: #ffd700; font-size: 18px; margin-bottom: 15px;">📱 Interface Mobile</h3>
+        <h3 style="color: #ffd700; font-size: 18px; margin-bottom: 15px;">🖥️ Affichage</h3>
+
+        <div class="setting-item">
+          <label style="color: #fff; display: block; margin-bottom: 10px;">
+            <input type="checkbox" id="fullscreen-checkbox" ${this.settings.fullscreenEnabled ? 'checked' : ''}>
+            Mode Plein Écran
+          </label>
+          <p style="color: #aaa; font-size: 12px; margin: 0 0 15px 0;">
+            Lance le jeu en plein écran pour une meilleure immersion
+          </p>
+        </div>
 
         <div class="setting-item">
           <label style="color: #fff; display: block; margin-bottom: 10px;">
@@ -209,6 +231,28 @@ class PerformanceSettingsManager {
             <option value="left" ${this.settings.minimapPosition === 'left' ? 'selected' : ''}>Gauche</option>
             <option value="hidden" ${this.settings.minimapPosition === 'hidden' ? 'selected' : ''}>Masquée</option>
           </select>
+        </div>
+
+        <div class="setting-item" style="margin-top: 15px;">
+          <label style="color: #fff; display: block; margin-bottom: 5px;">
+            Taille Minimap (Mobile):
+          </label>
+          <select id="minimap-size-select" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 2px solid #00ff00; border-radius: 5px;">
+            <option value="small" ${this.settings.minimapSize === 'small' ? 'selected' : ''}>Petite (50px)</option>
+            <option value="medium" ${this.settings.minimapSize === 'medium' ? 'selected' : ''}>Moyenne (80px)</option>
+            <option value="large" ${this.settings.minimapSize === 'large' ? 'selected' : ''}>Grande (120px)</option>
+          </select>
+        </div>
+
+        <div class="setting-item" style="margin-top: 15px;">
+          <label style="color: #fff; display: block; margin-bottom: 5px;">
+            Opacité Minimap: <span id="minimap-opacity-value">${Math.round(this.settings.minimapOpacity * 100)}%</span>
+          </label>
+          <input type="range" id="minimap-opacity-slider" min="30" max="100" value="${this.settings.minimapOpacity * 100}"
+                 style="width: 100%;">
+          <p style="color: #aaa; font-size: 12px; margin: 5px 0 0 0;">
+            Ajustez la transparence de la minimap
+          </p>
         </div>
       </div>
 
@@ -271,6 +315,11 @@ class PerformanceSettingsManager {
     // Real-time resolution slider update
     document.getElementById('resolution-slider').addEventListener('input', (e) => {
       document.getElementById('resolution-value').textContent = e.target.value + '%';
+    });
+
+    // Real-time minimap opacity slider update
+    document.getElementById('minimap-opacity-slider').addEventListener('input', (e) => {
+      document.getElementById('minimap-opacity-value').textContent = e.target.value + '%';
     });
 
     // Performance mode presets
@@ -366,6 +415,181 @@ class PerformanceSettingsManager {
   }
 
   /**
+   * Create fullscreen toggle button
+   */
+  createFullscreenButton() {
+    const btn = document.createElement('button');
+    btn.id = 'fullscreen-btn';
+    btn.innerHTML = '⛶';
+    btn.title = 'Basculer en plein écran (F11)';
+    btn.style.cssText = `
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid #ff6b00;
+      border-radius: 8px;
+      width: 45px;
+      height: 45px;
+      font-size: 22px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+    `;
+
+    btn.addEventListener('mouseenter', () => {
+      btn.style.transform = 'scale(1.1)';
+      btn.style.boxShadow = '0 0 20px rgba(255, 107, 0, 0.5)';
+    });
+
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = 'scale(1)';
+      btn.style.boxShadow = 'none';
+    });
+
+    btn.addEventListener('click', () => {
+      this.toggleFullscreen();
+      this.updateFullscreenButton();
+    });
+
+    document.body.appendChild(btn);
+
+    // Apply initial state
+    this.updateFullscreenButton();
+  }
+
+  /**
+   * Update fullscreen button appearance
+   */
+  updateFullscreenButton() {
+    const btn = document.getElementById('fullscreen-btn');
+    if (!btn) return;
+
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+
+    if (isFullscreen) {
+      btn.innerHTML = '⛶';
+      btn.title = 'Quitter le plein écran (ESC)';
+      btn.style.background = 'rgba(255, 107, 0, 0.3)';
+      btn.style.borderColor = '#ff6b00';
+    } else {
+      btn.innerHTML = '⛶';
+      btn.title = 'Basculer en plein écran';
+      btn.style.background = 'rgba(0, 0, 0, 0.8)';
+      btn.style.borderColor = '#ff6b00';
+    }
+  }
+
+  /**
+   * Create minimap toggle button (mobile)
+   */
+  createMinimapToggleButton() {
+    const isMobile = this.isMobile();
+    if (!isMobile) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'minimap-toggle-btn';
+    btn.innerHTML = '🗺️';
+    btn.title = 'Afficher/Masquer la Minimap';
+    btn.style.cssText = `
+      position: fixed;
+      bottom: 70px;
+      right: 10px;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid #00ccff;
+      border-radius: 8px;
+      width: 45px;
+      height: 45px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+    `;
+
+    btn.addEventListener('click', () => {
+      // Toggle between hidden and last known position
+      if (this.settings.minimapPosition === 'hidden') {
+        this.settings.minimapPosition = this.lastMinimapPosition || 'right';
+      } else {
+        this.lastMinimapPosition = this.settings.minimapPosition;
+        this.settings.minimapPosition = 'hidden';
+      }
+
+      this.applyMinimapSettings();
+      this.saveSettings();
+      this.updateMinimapToggleButton();
+
+      // Update select if panel is open
+      const select = document.getElementById('minimap-position-select');
+      if (select) {
+        select.value = this.settings.minimapPosition;
+      }
+    });
+
+    document.body.appendChild(btn);
+
+    // Apply initial state
+    this.updateMinimapToggleButton();
+  }
+
+  /**
+   * Update minimap toggle button appearance
+   */
+  updateMinimapToggleButton() {
+    const btn = document.getElementById('minimap-toggle-btn');
+    if (!btn) return;
+
+    const isHidden = this.settings.minimapPosition === 'hidden';
+
+    if (isHidden) {
+      btn.innerHTML = '🗺️';
+      btn.title = 'Afficher la Minimap';
+      btn.style.background = 'rgba(0, 0, 0, 0.8)';
+      btn.style.borderColor = '#666';
+      btn.style.opacity = '0.6';
+    } else {
+      btn.innerHTML = '🗺️';
+      btn.title = 'Masquer la Minimap';
+      btn.style.background = 'rgba(0, 204, 255, 0.3)';
+      btn.style.borderColor = '#00ccff';
+      btn.style.opacity = '1';
+    }
+  }
+
+  /**
+   * Setup fullscreen event listeners
+   */
+  setupFullscreenListeners() {
+    // Handle fullscreen changes (e.g., when user presses ESC)
+    const handleFullscreenChange = () => {
+      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+
+      this.settings.fullscreenEnabled = isFullscreen;
+      this.saveSettings();
+      this.updateFullscreenButton();
+
+      // Update checkbox if panel is open
+      const checkbox = document.getElementById('fullscreen-checkbox');
+      if (checkbox) {
+        checkbox.checked = isFullscreen;
+      }
+
+      // Resize canvas when entering/exiting fullscreen
+      if (window.gameEngine) {
+        setTimeout(() => {
+          window.gameEngine.resizeCanvas();
+        }, 100);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
+    document.addEventListener('msfullscreenchange', handleFullscreenChange); // IE11
+  }
+
+  /**
    * Toggle settings panel
    */
   toggleSettingsPanel() {
@@ -400,6 +624,9 @@ class PerformanceSettingsManager {
     const immersiveMode = document.getElementById('immersive-mode-checkbox').checked;
     const minimapPosition = document.getElementById('minimap-position-select').value;
     const autoAdjust = document.getElementById('auto-adjust-checkbox').checked;
+    const fullscreenEnabled = document.getElementById('fullscreen-checkbox').checked;
+    const minimapSize = document.getElementById('minimap-size-select').value;
+    const minimapOpacity = parseInt(document.getElementById('minimap-opacity-slider').value) / 100;
 
     this.settings = {
       performanceMode: perfMode,
@@ -409,7 +636,10 @@ class PerformanceSettingsManager {
       gridEnabled,
       shadowsEnabled: this.settings.shadowsEnabled,
       immersiveMode,
-      minimapPosition
+      minimapPosition,
+      fullscreenEnabled,
+      minimapSize,
+      minimapOpacity
     };
 
     this.autoAdjust = autoAdjust;
@@ -425,8 +655,11 @@ class PerformanceSettingsManager {
     // Apply immersive mode
     this.applyImmersiveMode();
 
-    // Apply minimap position
-    this.applyMinimapPosition();
+    // Apply minimap settings (position, size, opacity)
+    this.applyMinimapSettings();
+
+    // Apply fullscreen mode
+    this.applyFullscreen();
 
     // Notify game of settings change
     if (window.gameEngine) {
@@ -483,16 +716,18 @@ class PerformanceSettingsManager {
   }
 
   /**
-   * Apply minimap position
+   * Apply minimap settings (position, size, opacity)
    */
-  applyMinimapPosition() {
+  applyMinimapSettings() {
     const minimap = document.getElementById('minimap');
     if (!minimap) return;
 
     minimap.style.transition = 'all 0.3s ease';
 
+    // Position
     if (this.settings.minimapPosition === 'hidden') {
       minimap.style.display = 'none';
+      return; // No need to apply other settings if hidden
     } else {
       minimap.style.display = 'block';
 
@@ -503,6 +738,98 @@ class PerformanceSettingsManager {
         minimap.style.right = '0.5rem';
         minimap.style.left = 'auto';
       }
+    }
+
+    // Opacity
+    minimap.style.opacity = this.settings.minimapOpacity;
+
+    // Size (only on mobile)
+    const isMobile = this.isMobile();
+    if (isMobile) {
+      const sizeMap = {
+        'small': '50px',
+        'medium': '80px',
+        'large': '120px'
+      };
+      const size = sizeMap[this.settings.minimapSize] || '80px';
+      minimap.style.width = size;
+      minimap.style.height = size;
+
+      // Also update canvas dimensions
+      if (window.gameEngine) {
+        window.gameEngine.resizeMinimapCanvas();
+      }
+    }
+  }
+
+  /**
+   * Apply minimap position (kept for backwards compatibility)
+   */
+  applyMinimapPosition() {
+    this.applyMinimapSettings();
+  }
+
+  /**
+   * Apply fullscreen mode
+   */
+  applyFullscreen() {
+    if (this.settings.fullscreenEnabled) {
+      this.enterFullscreen();
+    } else {
+      this.exitFullscreen();
+    }
+  }
+
+  /**
+   * Enter fullscreen mode
+   */
+  enterFullscreen() {
+    const elem = document.documentElement;
+
+    if (!document.fullscreenElement) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(err => {
+          console.warn('Failed to enter fullscreen:', err);
+          this.settings.fullscreenEnabled = false;
+        });
+      } else if (elem.webkitRequestFullscreen) { // Safari
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { // IE11
+        elem.msRequestFullscreen();
+      } else {
+        console.warn('Fullscreen API not supported');
+        this.settings.fullscreenEnabled = false;
+      }
+    }
+  }
+
+  /**
+   * Exit fullscreen mode
+   */
+  exitFullscreen() {
+    if (document.fullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) { // Safari
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) { // IE11
+        document.msExitFullscreen();
+      }
+    }
+  }
+
+  /**
+   * Toggle fullscreen mode
+   */
+  toggleFullscreen() {
+    this.settings.fullscreenEnabled = !this.settings.fullscreenEnabled;
+    this.applyFullscreen();
+    this.saveSettings();
+
+    // Update checkbox if panel is open
+    const checkbox = document.getElementById('fullscreen-checkbox');
+    if (checkbox) {
+      checkbox.checked = this.settings.fullscreenEnabled;
     }
   }
 

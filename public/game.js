@@ -2921,15 +2921,33 @@ class GameEngine {
 
     // Note: Pixel ratio scaling is applied in the render() method to avoid accumulation
 
-    // Also resize minimap canvas for Retina displays (only if renderer exists)
-    if (this.renderer && this.renderer.minimapCanvas) {
-      const minimapSize = 200;
-      this.renderer.minimapCanvas.style.width = minimapSize + 'px';
-      this.renderer.minimapCanvas.style.height = minimapSize + 'px';
-      this.renderer.minimapCanvas.width = minimapSize * basePixelRatio;
-      this.renderer.minimapCanvas.height = minimapSize * basePixelRatio;
-      // Minimap scaling is handled in renderMinimap()
+    // Also resize minimap canvas
+    this.resizeMinimapCanvas();
+  }
+
+  resizeMinimapCanvas() {
+    if (!this.renderer || !this.renderer.minimapCanvas) return;
+
+    const basePixelRatio = window.devicePixelRatio || 1;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    let minimapSize = 200; // Default desktop size
+
+    // Apply mobile size settings
+    if (isMobile && window.performanceSettings) {
+      const settings = window.performanceSettings.getSettings();
+      const sizeMap = {
+        'small': 50,
+        'medium': 80,
+        'large': 120
+      };
+      minimapSize = sizeMap[settings.minimapSize] || 80;
     }
+
+    // Set canvas internal dimensions with pixel ratio
+    this.renderer.minimapCanvas.width = minimapSize * basePixelRatio;
+    this.renderer.minimapCanvas.height = minimapSize * basePixelRatio;
+    // Minimap scaling is handled in renderMinimap()
   }
 
   initializeManagers() {
