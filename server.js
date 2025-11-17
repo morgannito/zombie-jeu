@@ -194,6 +194,20 @@ const ZOMBIE_TYPES = {
     slowAmount: 0.5,
     slowDuration: 2000
   },
+  shooter: {
+    name: 'Zombie Tireur',
+    health: 60,
+    speed: 1.2,
+    damage: 15, // Dégâts par balle
+    color: '#ff9900',
+    size: 24,
+    goldDrop: 28,
+    xpDrop: 48,
+    shootRange: 350, // Portée de tir
+    shootCooldown: 2000, // Tire toutes les 2 secondes
+    bulletSpeed: 8,
+    bulletColor: '#ff3300'
+  },
   boss: {
     name: 'Boss Zombie',
     health: 400,
@@ -652,14 +666,14 @@ function spawnSingleZombie() {
     // Vagues 1-3 : Principalement des zombies normaux
     types = ['normal', 'normal', 'normal', 'normal', 'fast', 'fast', 'tank'];
   } else if (gameState.wave <= 6) {
-    // Vagues 4-6 : Mélange équilibré
-    types = ['normal', 'normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'healer', 'slower'];
+    // Vagues 4-6 : Mélange équilibré avec apparition des tireurs
+    types = ['normal', 'normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'healer', 'slower', 'shooter'];
   } else if (gameState.wave <= 10) {
-    // Vagues 7-10 : Plus de zombies spéciaux
-    types = ['normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'slower', 'slower'];
+    // Vagues 7-10 : Plus de zombies spéciaux et tireurs
+    types = ['normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'slower', 'slower', 'shooter', 'shooter'];
   } else {
-    // Vague 11+ : Chaos total - Beaucoup de zombies dangereux
-    types = ['fast', 'fast', 'tank', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'healer', 'slower', 'slower'];
+    // Vague 11+ : Chaos total - Beaucoup de zombies dangereux et tireurs
+    types = ['fast', 'fast', 'tank', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'healer', 'slower', 'slower', 'shooter', 'shooter', 'shooter'];
   }
   const typeKey = types[Math.floor(Math.random() * types.length)];
   const type = ZOMBIE_TYPES[typeKey];
@@ -688,7 +702,8 @@ function spawnSingleZombie() {
     goldDrop: zombieGold,
     xpDrop: zombieXP,
     // Attributs spéciaux
-    lastHeal: typeKey === 'healer' ? Date.now() : null
+    lastHeal: typeKey === 'healer' ? Date.now() : null,
+    lastShot: typeKey === 'shooter' ? Date.now() : null
   };
 
   gameState.zombiesSpawnedThisWave++;
@@ -960,6 +975,61 @@ function gameLoop() {
       }
     }
 
+    // Capacité spéciale : Zombie Tireur
+    if (zombie.type === 'shooter') {
+      const shooterType = ZOMBIE_TYPES.shooter;
+
+      // Vérifier le cooldown de tir
+      if (!zombie.lastShot || now - zombie.lastShot >= shooterType.shootCooldown) {
+        // Trouver le joueur le plus proche dans la portée
+        let targetPlayer = null;
+        let targetDistance = Infinity;
+
+        for (let playerId in gameState.players) {
+          const player = gameState.players[playerId];
+          // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
+          if (!player.alive || !player.hasNickname || player.spawnProtection) {
+            continue;
+          }
+
+          const dist = distance(zombie.x, zombie.y, player.x, player.y);
+          if (dist < shooterType.shootRange && dist < targetDistance) {
+            targetDistance = dist;
+            targetPlayer = player;
+          }
+        }
+
+        // Tirer sur le joueur cible
+        if (targetPlayer) {
+          zombie.lastShot = now;
+
+          // Créer une balle de zombie
+          const bulletId = gameState.nextBulletId++;
+          const angle = Math.atan2(targetPlayer.y - zombie.y, targetPlayer.x - zombie.x);
+
+          gameState.bullets[bulletId] = {
+            id: bulletId,
+            x: zombie.x,
+            y: zombie.y,
+            vx: Math.cos(angle) * shooterType.bulletSpeed,
+            vy: Math.sin(angle) * shooterType.bulletSpeed,
+            zombieId: zombieId, // Balle de zombie, pas de joueur
+            damage: zombie.damage,
+            color: shooterType.bulletColor,
+            isZombieBullet: true, // Marquer comme balle de zombie
+            piercing: 0,
+            piercedZombies: [],
+            explosiveRounds: false,
+            explosionRadius: 0,
+            explosionDamagePercent: 0
+          };
+
+          // Créer des particules de tir
+          createParticles(zombie.x, zombie.y, shooterType.bulletColor, 5);
+        }
+      }
+    }
+
     // Trouver le joueur le plus proche
     // IMPORTANT: Les zombies ignorent les joueurs sans pseudo ou avec protection de spawn
     let closestPlayer = null;
@@ -986,11 +1056,30 @@ function gameLoop() {
       const newX = zombie.x + Math.cos(angle) * zombie.speed;
       const newY = zombie.y + Math.sin(angle) * zombie.speed;
 
-      // Vérifier collision avec les murs
+      // Vérifier collision avec les murs - avec système de glissement
+      let finalX = zombie.x;
+      let finalY = zombie.y;
+
+      // Essayer de se déplacer dans les deux directions
       if (!checkWallCollision(newX, newY, zombie.size)) {
-        zombie.x = newX;
-        zombie.y = newY;
+        // Pas de collision, mouvement libre
+        finalX = newX;
+        finalY = newY;
+      } else {
+        // Collision détectée, essayer de glisser le long des murs
+        // Essayer uniquement l'axe X
+        if (!checkWallCollision(newX, zombie.y, zombie.size)) {
+          finalX = newX;
+        }
+        // Essayer uniquement l'axe Y
+        if (!checkWallCollision(zombie.x, newY, zombie.size)) {
+          finalY = newY;
+        }
       }
+
+      // Appliquer la nouvelle position
+      zombie.x = finalX;
+      zombie.y = finalY;
 
       // Vérifier collision avec joueurs
       for (let playerId in gameState.players) {
@@ -1040,7 +1129,42 @@ function gameLoop() {
       continue;
     }
 
-    // Vérifier collision avec zombies
+    // Si c'est une balle de zombie, vérifier collision avec les joueurs
+    if (bullet.isZombieBullet) {
+      for (let playerId in gameState.players) {
+        const player = gameState.players[playerId];
+
+        // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
+        if (!player.alive || !player.hasNickname || player.spawnProtection) {
+          continue;
+        }
+
+        if (distance(bullet.x, bullet.y, player.x, player.y) < CONFIG.PLAYER_SIZE) {
+          // Esquive
+          if (Math.random() < (player.dodgeChance || 0)) {
+            delete gameState.bullets[bulletId];
+            break; // Esquive réussie, balle disparaît
+          }
+
+          // Infliger les dégâts
+          player.health -= bullet.damage;
+
+          if (player.health <= 0) {
+            player.health = 0;
+            player.alive = false;
+          }
+
+          // Créer des particules de sang
+          createParticles(player.x, player.y, '#ff0000', 8);
+
+          delete gameState.bullets[bulletId];
+          break;
+        }
+      }
+      continue; // Passer à la prochaine balle, ne pas vérifier les zombies
+    }
+
+    // Vérifier collision avec zombies (seulement pour les balles de joueurs)
     for (let zombieId in gameState.zombies) {
       const zombie = gameState.zombies[zombieId];
       if (distance(bullet.x, bullet.y, zombie.x, zombie.y) < zombie.size) {
@@ -1100,6 +1224,7 @@ function gameLoop() {
             const explosionType = ZOMBIE_TYPES.explosive;
             // Créer une énorme explosion de particules
             createParticles(zombie.x, zombie.y, '#ff00ff', 30);
+            createParticles(zombie.x, zombie.y, '#ff8800', 20);
 
             // Infliger des dégâts à tous les joueurs dans le rayon
             for (let playerId in gameState.players) {
@@ -1113,6 +1238,21 @@ function gameLoop() {
                     player.health = 0;
                     player.alive = false;
                   }
+                }
+              }
+            }
+
+            // NOUVEAU : Infliger des dégâts aux autres zombies dans le rayon
+            for (let otherId in gameState.zombies) {
+              if (otherId !== zombieId) {
+                const other = gameState.zombies[otherId];
+                const dist = distance(zombie.x, zombie.y, other.x, other.y);
+                if (dist < explosionType.explosionRadius) {
+                  // L'explosion tue instantanément les zombies normaux, blesse les autres
+                  const explosionDamage = explosionType.explosionDamage * 1.5; // 50% plus de dégâts aux zombies
+                  other.health -= explosionDamage;
+                  // Créer des particules pour montrer l'impact
+                  createParticles(other.x, other.y, other.color, 8);
                 }
               }
             }
