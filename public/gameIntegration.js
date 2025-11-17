@@ -529,10 +529,10 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initializeEnhancedSystems();
     createSkinsMenu();
-    addSkinsButton();
+    // addSkinsButton(); // Désactivé - bouton skins retiré
   });
 } else {
   initializeEnhancedSystems();
   createSkinsMenu();
-  addSkinsButton();
+  // addSkinsButton(); // Désactivé - bouton skins retiré
 }
