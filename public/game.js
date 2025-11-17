@@ -868,17 +868,14 @@ class ComboSystem {
         }
       }, 200);
 
-      // Particules visuelles pour les gros combos
-      if (this.combo % 10 === 0 && window.visualEffects) {
-        const canvas = document.getElementById('gameCanvas');
-        const rect = canvas.getBoundingClientRect();
-        window.visualEffects.createFloatingText(
-          rect.right - 100,
-          rect.top + 120,
-          `${this.combo} COMBO!`,
-          color,
-          40
-        );
+      // Animation bonus pour les gros combos (tous les 10 kills)
+      if (this.combo % 10 === 0) {
+        this.comboElement.style.fontSize = '40px';
+        setTimeout(() => {
+          if (this.comboElement) {
+            this.comboElement.style.fontSize = '32px';
+          }
+        }, 300);
       }
     }
 
@@ -934,7 +931,7 @@ class LeaderboardSystem {
   }
 
   addEntry(player) {
-    if (!player || !player.alive === false) {
+    if (player && player.alive === false) {
       const survivalTime = player.survivalTime ? Math.floor((Date.now() - player.survivalTime) / 1000) : 0;
 
       const entry = {

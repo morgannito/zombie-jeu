@@ -1479,8 +1479,8 @@ function gameLoop() {
               const other = gameState.zombies[otherId];
               const dist = distance(zombie.x, zombie.y, other.x, other.y);
               if (dist < bullet.explosionRadius) {
-                // Les roquettes utilisent des dégâts fixes, les autres armes un pourcentage
-                const explosionDmg = bullet.isRocket ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
+                // Les armes avec explosion définie utilisent les dégâts fixes, sinon un pourcentage
+                const explosionDmg = bullet.rocketExplosionDamage > 0 ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
                 other.health -= explosionDmg;
                 // Créer des particules sur les zombies touchés
                 createParticles(other.x, other.y, other.color, 8);
