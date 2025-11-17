@@ -11,15 +11,21 @@
 class ParticleSystem {
   constructor() {
     this.particles = [];
-    this.maxParticles = 500; // Limite pour performance
+    this.maxParticles = 300; // Limite réduite pour meilleures performances (500 -> 300)
   }
 
   /**
    * Crée une explosion de particules
    */
   createExplosion(x, y, color, count = 20, size = 3) {
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count;
+    // Vérification de la limite de particules
+    if (this.particles.length >= this.maxParticles) return;
+
+    // Limiter le nombre de particules créées
+    const maxToCreate = Math.min(count, this.maxParticles - this.particles.length);
+
+    for (let i = 0; i < maxToCreate; i++) {
+      const angle = (Math.PI * 2 * i) / maxToCreate;
       const speed = 2 + Math.random() * 3;
       this.particles.push({
         x,
@@ -29,7 +35,7 @@ class ParticleSystem {
         size: size + Math.random() * 2,
         color,
         life: 1,
-        decay: 0.015 + Math.random() * 0.01,
+        decay: 0.02 + Math.random() * 0.015, // Disparaissent plus vite
         gravity: 0.1,
         type: 'explosion'
       });
@@ -40,8 +46,13 @@ class ParticleSystem {
    * Crée un effet de sang (impact zombie)
    */
   createBloodSplatter(x, y, direction, color = '#00ff00') {
-    const count = 15;
-    for (let i = 0; i < count; i++) {
+    // Vérification de la limite de particules
+    if (this.particles.length >= this.maxParticles) return;
+
+    const count = 8; // Réduit de 15 à 8
+    const maxToCreate = Math.min(count, this.maxParticles - this.particles.length);
+
+    for (let i = 0; i < maxToCreate; i++) {
       const spread = 0.5;
       const angle = direction + (Math.random() - 0.5) * spread;
       const speed = 3 + Math.random() * 4;
@@ -53,7 +64,7 @@ class ParticleSystem {
         size: 2 + Math.random() * 3,
         color,
         life: 1,
-        decay: 0.008,
+        decay: 0.012, // Disparaissent plus vite (0.008 -> 0.012)
         gravity: 0.2,
         type: 'blood'
       });
@@ -84,7 +95,12 @@ class ParticleSystem {
    * Crée des étincelles (pour critiques, etc.)
    */
   createSparks(x, y, count = 10) {
-    for (let i = 0; i < count; i++) {
+    // Vérification de la limite de particules
+    if (this.particles.length >= this.maxParticles) return;
+
+    const maxToCreate = Math.min(count, this.maxParticles - this.particles.length);
+
+    for (let i = 0; i < maxToCreate; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 2 + Math.random() * 3;
       this.particles.push({
@@ -95,7 +111,7 @@ class ParticleSystem {
         size: 1 + Math.random() * 2,
         color: `hsl(${45 + Math.random() * 30}, 100%, 60%)`, // Jaune/orange
         life: 1,
-        decay: 0.02,
+        decay: 0.025, // Disparaissent plus vite
         gravity: 0.05,
         type: 'spark'
       });
@@ -125,9 +141,14 @@ class ParticleSystem {
    * Crée un effet de heal/buff
    */
   createHealEffect(x, y, radius = 30) {
-    const count = 20;
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count;
+    // Vérification de la limite de particules
+    if (this.particles.length >= this.maxParticles) return;
+
+    const count = 12; // Réduit de 20 à 12
+    const maxToCreate = Math.min(count, this.maxParticles - this.particles.length);
+
+    for (let i = 0; i < maxToCreate; i++) {
+      const angle = (Math.PI * 2 * i) / maxToCreate;
       this.particles.push({
         x: x + Math.cos(angle) * radius,
         y: y + Math.sin(angle) * radius,
@@ -136,7 +157,7 @@ class ParticleSystem {
         size: 3,
         color: '#00ff88',
         life: 1,
-        decay: 0.01,
+        decay: 0.015, // Disparaissent plus vite
         gravity: -0.05, // Remonte
         type: 'heal'
       });
@@ -482,31 +503,38 @@ class AdvancedEffectsManager {
    * Effet lors d'un tir
    */
   onPlayerShoot(x, y, angle, weaponType) {
-    // Particules de fumée
-    this.particles.createExplosion(x, y, 'rgba(150, 150, 150, 0.5)', 5, 2);
+    // OPTIMISATION: Réduction drastique des particules pour éviter le lag
+    // Particules de fumée réduites de 5 à 2
+    this.particles.createExplosion(x, y, 'rgba(150, 150, 150, 0.5)', 2, 1.5);
 
-    // Trail de balle
-    const bulletColor = weaponType === 'shotgun' ? '#ffaa00' :
-                       weaponType === 'machinegun' ? '#ff0000' : '#00ffff';
-    this.particles.createTrail(x, y, bulletColor, 3);
+    // Trail de balle - seulement 1 fois sur 3 pour mitraillette
+    if (weaponType !== 'machinegun' || Math.random() < 0.33) {
+      const bulletColor = weaponType === 'shotgun' ? '#ffaa00' :
+                         weaponType === 'machinegun' ? '#ff0000' : '#00ffff';
+      this.particles.createTrail(x, y, bulletColor, 2);
+    }
 
-    // Petit shake
-    this.screenShake.shake(2, 100);
+    // Shake réduit pour machinegun
+    if (weaponType === 'machinegun') {
+      this.screenShake.shake(1, 50);
+    } else {
+      this.screenShake.shake(2, 100);
+    }
   }
 
   /**
    * Effet lors d'un impact sur zombie
    */
   onZombieHit(x, y, angle, damage, isCritical, zombieColor) {
-    // Sang
+    // Sang (déjà réduit dans createBloodSplatter)
     this.particles.createBloodSplatter(x, y, angle, zombieColor);
 
-    // Étincelles si critique
+    // Étincelles si critique (réduit de 15 à 8)
     if (isCritical) {
-      this.particles.createSparks(x, y, 15);
-      this.screenShake.shake(8, 200);
+      this.particles.createSparks(x, y, 8);
+      this.screenShake.shake(6, 150);
     } else {
-      this.screenShake.shake(3, 100);
+      this.screenShake.shake(2, 80);
     }
 
     // Damage number
@@ -517,22 +545,24 @@ class AdvancedEffectsManager {
    * Effet lors de la mort d'un zombie
    */
   onZombieDeath(x, y, zombieColor) {
-    this.particles.createExplosion(x, y, zombieColor, 30, 4);
-    this.screenShake.shake(5, 200);
+    // Réduit de 30 à 15 particules
+    this.particles.createExplosion(x, y, zombieColor, 15, 3);
+    this.screenShake.shake(4, 150);
   }
 
   /**
    * Effet lors d'une explosion
    */
   onExplosion(x, y, radius) {
-    this.particles.createExplosion(x, y, '#ff6600', 50, 5);
-    this.screenShake.shake(15, 400);
+    // Réduit de 50 à 25 particules pour l'explosion principale
+    this.particles.createExplosion(x, y, '#ff6600', 25, 4);
+    this.screenShake.shake(12, 300);
 
-    // Onde de choc (cercle qui s'agrandit)
-    for (let i = 0; i < 20; i++) {
+    // Onde de choc réduite (20 -> 10 ondes, 10 -> 5 particules)
+    for (let i = 0; i < 10; i++) {
       setTimeout(() => {
-        this.particles.createExplosion(x, y, 'rgba(255, 100, 0, 0.3)', 10, 2);
-      }, i * 20);
+        this.particles.createExplosion(x, y, 'rgba(255, 100, 0, 0.3)', 5, 2);
+      }, i * 30);
     }
   }
 
@@ -541,7 +571,7 @@ class AdvancedEffectsManager {
    */
   onGoldCollect(x, y, amount) {
     this.animations.createDamageNumber(x, y, `+${amount}💰`, false);
-    this.particles.createHealEffect(x, y, 20);
+    this.particles.createHealEffect(x, y, 15); // Réduit le rayon de 20 à 15
   }
 
   /**
@@ -556,8 +586,8 @@ class AdvancedEffectsManager {
    */
   onLevelUp(x, y) {
     this.animations.createLevelUpAnimation(x, y);
-    this.particles.createExplosion(x, y, '#ffd700', 40, 6);
-    this.screenShake.shake(10, 300);
+    this.particles.createExplosion(x, y, '#ffd700', 20, 4); // Réduit de 40 à 20
+    this.screenShake.shake(8, 250);
   }
 
   /**
@@ -565,14 +595,14 @@ class AdvancedEffectsManager {
    */
   onHeal(x, y, amount) {
     this.animations.createHealNumber(x, y - 20, amount);
-    this.particles.createHealEffect(x, y, 30);
+    this.particles.createHealEffect(x, y, 20); // Réduit de 30 à 20
   }
 
   /**
    * Effet de damage player
    */
   onPlayerDamage(x, y, damage) {
-    this.screenShake.shake(12, 250);
+    this.screenShake.shake(10, 200);
     this.animations.createDamageNumber(x, y - 20, damage, true);
   }
 
@@ -580,8 +610,8 @@ class AdvancedEffectsManager {
    * Effet de boss spawn
    */
   onBossSpawn(x, y) {
-    this.particles.createExplosion(x, y, '#ff0000', 60, 8);
-    this.screenShake.shake(20, 500);
+    this.particles.createExplosion(x, y, '#ff0000', 30, 6); // Réduit de 60 à 30
+    this.screenShake.shake(15, 400);
   }
 
   /**
