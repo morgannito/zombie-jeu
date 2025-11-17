@@ -1352,9 +1352,14 @@ class PlayerController {
         angle = Math.atan2(dy, dx);
       } else {
         // Sur desktop, utiliser la position de la souris
+        // Convertir les coordonnées écran de la souris en coordonnées monde
+        const cameraPos = this.camera.getPosition();
+        const mouseWorldX = this.input.mouse.x + cameraPos.x;
+        const mouseWorldY = this.input.mouse.y + cameraPos.y;
+        // Calculer l'angle du joueur vers la souris
         angle = Math.atan2(
-          this.input.mouse.y - canvasHeight / 2,
-          this.input.mouse.x - canvasWidth / 2
+          mouseWorldY - player.y,
+          mouseWorldX - player.x
         );
       }
 
@@ -1399,9 +1404,14 @@ class PlayerController {
     const player = this.gameState.getPlayer();
     if (!player || !player.alive || !this.gameStarted) return;
 
+    // Convertir les coordonnées écran de la souris en coordonnées monde
+    const cameraPos = this.camera.getPosition();
+    const mouseWorldX = this.input.mouse.x + cameraPos.x;
+    const mouseWorldY = this.input.mouse.y + cameraPos.y;
+    // Calculer l'angle du joueur vers la souris
     const angle = Math.atan2(
-      this.input.mouse.y - canvasHeight / 2,
-      this.input.mouse.x - canvasWidth / 2
+      mouseWorldY - player.y,
+      mouseWorldX - player.x
     );
 
     // Jouer le son de tir
