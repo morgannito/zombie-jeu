@@ -472,6 +472,7 @@ function addSkinsButton() {
     cursor: pointer;
     z-index: 100;
     transition: all 0.3s ease;
+    display: block;
   `;
 
   button.addEventListener('click', () => {
@@ -494,6 +495,30 @@ function addSkinsButton() {
 
   document.body.appendChild(button);
 }
+
+/**
+ * Cache le bouton skins (quand le jeu est en cours)
+ */
+function hideSkinsButton() {
+  const button = document.getElementById('open-skins-btn');
+  if (button) {
+    button.style.display = 'none';
+  }
+}
+
+/**
+ * Affiche le bouton skins (au menu principal)
+ */
+function showSkinsButton() {
+  const button = document.getElementById('open-skins-btn');
+  if (button) {
+    button.style.display = 'block';
+  }
+}
+
+// Rendre les fonctions disponibles globalement
+window.hideSkinsButton = hideSkinsButton;
+window.showSkinsButton = showSkinsButton;
 
 /* ============================================
    INITIALISATION AU CHARGEMENT
