@@ -3198,6 +3198,15 @@ class NicknameManager {
     // Hide nickname screen
     this.nicknameScreen.style.display = 'none';
 
+    // Hide skins button and menu during gameplay
+    if (window.hideSkinsButton) {
+      window.hideSkinsButton();
+    }
+    const skinsMenu = document.getElementById('skins-menu');
+    if (skinsMenu) {
+      skinsMenu.style.display = 'none';
+    }
+
     // Set player nickname
     this.playerController.setNickname(nickname);
 
@@ -3255,6 +3264,11 @@ class NicknameManager {
     }
     if (this.nicknameScreen) {
       this.nicknameScreen.style.display = 'flex';
+    }
+
+    // Show skins button again in menu
+    if (window.showSkinsButton) {
+      window.showSkinsButton();
     }
   }
 }
