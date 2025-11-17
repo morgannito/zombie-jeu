@@ -1245,26 +1245,175 @@ class Renderer {
     });
   }
 
+  drawZombieSprite(zombie) {
+    this.ctx.save();
+    this.ctx.translate(zombie.x, zombie.y);
+
+    // Animation de marche (oscillation des bras et jambes)
+    const walkCycle = Math.sin(Date.now() / 200 + zombie.id) * 0.2;
+    const scale = zombie.isBoss ? 1.5 : 1;
+    const baseSize = zombie.size / 25; // Normaliser par rapport à la taille par défaut (25)
+
+    // Corps
+    this.ctx.fillStyle = zombie.color;
+    this.ctx.strokeStyle = '#000';
+    this.ctx.lineWidth = zombie.isBoss ? 3 : 1.5;
+
+    // Jambes (arrière-plan)
+    const legWidth = 6 * baseSize * scale;
+    const legHeight = 12 * baseSize * scale;
+    const legSpacing = 8 * baseSize * scale;
+
+    // Jambe gauche
+    this.ctx.save();
+    this.ctx.translate(-legSpacing / 2, 10 * baseSize * scale);
+    this.ctx.rotate(walkCycle);
+    this.ctx.fillRect(-legWidth / 2, 0, legWidth, legHeight);
+    this.ctx.strokeRect(-legWidth / 2, 0, legWidth, legHeight);
+    this.ctx.restore();
+
+    // Jambe droite
+    this.ctx.save();
+    this.ctx.translate(legSpacing / 2, 10 * baseSize * scale);
+    this.ctx.rotate(-walkCycle);
+    this.ctx.fillRect(-legWidth / 2, 0, legWidth, legHeight);
+    this.ctx.strokeRect(-legWidth / 2, 0, legWidth, legHeight);
+    this.ctx.restore();
+
+    // Corps principal (torse) - rectangle simple pour compatibilité
+    const bodyWidth = 18 * baseSize * scale;
+    const bodyHeight = 20 * baseSize * scale;
+    this.ctx.fillRect(-bodyWidth / 2, -5 * baseSize * scale, bodyWidth, bodyHeight);
+    this.ctx.strokeRect(-bodyWidth / 2, -5 * baseSize * scale, bodyWidth, bodyHeight);
+
+    // Bras
+    const armWidth = 5 * baseSize * scale;
+    const armHeight = 14 * baseSize * scale;
+    const armOffset = bodyWidth / 2 + 2 * baseSize * scale;
+
+    // Bras gauche
+    this.ctx.save();
+    this.ctx.translate(-armOffset, 0);
+    this.ctx.rotate(-walkCycle * 1.5);
+    this.ctx.fillRect(-armWidth / 2, 0, armWidth, armHeight);
+    this.ctx.strokeRect(-armWidth / 2, 0, armWidth, armHeight);
+    this.ctx.restore();
+
+    // Bras droit
+    this.ctx.save();
+    this.ctx.translate(armOffset, 0);
+    this.ctx.rotate(walkCycle * 1.5);
+    this.ctx.fillRect(-armWidth / 2, 0, armWidth, armHeight);
+    this.ctx.strokeRect(-armWidth / 2, 0, armWidth, armHeight);
+    this.ctx.restore();
+
+    // Tête
+    const headRadius = 10 * baseSize * scale;
+    this.ctx.beginPath();
+    this.ctx.arc(0, -10 * baseSize * scale, headRadius, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    // Yeux (rouges effrayants)
+    const eyeSize = zombie.isBoss ? 4 * scale : 2.5 * scale;
+    const eyeOffset = 4 * baseSize * scale;
+    this.ctx.fillStyle = '#ff0000';
+    this.ctx.shadowBlur = 5;
+    this.ctx.shadowColor = '#ff0000';
+    this.ctx.beginPath();
+    this.ctx.arc(-eyeOffset, -12 * baseSize * scale, eyeSize, 0, Math.PI * 2);
+    this.ctx.arc(eyeOffset, -12 * baseSize * scale, eyeSize, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.shadowBlur = 0;
+
+    // Bouche (grimace)
+    this.ctx.strokeStyle = '#000';
+    this.ctx.lineWidth = 1.5;
+    this.ctx.beginPath();
+    this.ctx.arc(0, -6 * baseSize * scale, 4 * baseSize * scale, 0.2, Math.PI - 0.2);
+    this.ctx.stroke();
+
+    // Détails spéciaux selon le type
+    if (zombie.type === 'tank') {
+      // Armure sur les épaules et casque
+      this.ctx.fillStyle = '#444';
+      this.ctx.strokeStyle = '#222';
+      this.ctx.lineWidth = 1;
+      // Épaulières
+      this.ctx.fillRect(-bodyWidth / 2 - 4, -3 * baseSize * scale, 8, 10);
+      this.ctx.strokeRect(-bodyWidth / 2 - 4, -3 * baseSize * scale, 8, 10);
+      this.ctx.fillRect(bodyWidth / 2 - 4, -3 * baseSize * scale, 8, 10);
+      this.ctx.strokeRect(bodyWidth / 2 - 4, -3 * baseSize * scale, 8, 10);
+      // Casque
+      this.ctx.fillRect(-headRadius * 0.8, -16 * baseSize * scale, headRadius * 1.6, 4);
+      this.ctx.strokeRect(-headRadius * 0.8, -16 * baseSize * scale, headRadius * 1.6, 4);
+    } else if (zombie.type === 'fast') {
+      // Traits de vitesse et posture penchée
+      this.ctx.strokeStyle = zombie.color;
+      this.ctx.lineWidth = 2;
+      this.ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 3; i++) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(-bodyWidth / 2 - 5 - i * 4, -5 + i * 4);
+        this.ctx.lineTo(-bodyWidth / 2 - 12 - i * 4, -5 + i * 4);
+        this.ctx.stroke();
+      }
+      this.ctx.globalAlpha = 1;
+    } else if (zombie.type === 'explosive') {
+      // Taches/veines explosives sur le corps
+      this.ctx.strokeStyle = '#ff00ff';
+      this.ctx.lineWidth = 2;
+      this.ctx.globalAlpha = 0.6 + Math.sin(Date.now() / 100) * 0.3; // Pulsation
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, -5 * baseSize * scale);
+      this.ctx.lineTo(-5, 0);
+      this.ctx.moveTo(0, -5 * baseSize * scale);
+      this.ctx.lineTo(5, 0);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 1;
+    } else if (zombie.type === 'healer') {
+      // Aura de soin
+      this.ctx.strokeStyle = '#00ffff';
+      this.ctx.lineWidth = 1.5;
+      this.ctx.globalAlpha = 0.4;
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, headRadius + 5, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 1;
+    } else if (zombie.type === 'slower') {
+      // Aura ralentissante violette
+      this.ctx.strokeStyle = '#8800ff';
+      this.ctx.lineWidth = 1.5;
+      this.ctx.globalAlpha = 0.3;
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, headRadius + 3, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 1;
+    } else if (zombie.isBoss) {
+      // Couronne/Crâne pour le boss
+      this.ctx.fillStyle = '#ff0000';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      // Points de la couronne
+      this.ctx.beginPath();
+      this.ctx.moveTo(-8 * scale, -18 * baseSize * scale);
+      this.ctx.lineTo(-6 * scale, -22 * baseSize * scale);
+      this.ctx.lineTo(-3 * scale, -18 * baseSize * scale);
+      this.ctx.lineTo(0, -24 * baseSize * scale);
+      this.ctx.lineTo(3 * scale, -18 * baseSize * scale);
+      this.ctx.lineTo(6 * scale, -22 * baseSize * scale);
+      this.ctx.lineTo(8 * scale, -18 * baseSize * scale);
+      this.ctx.fill();
+      this.ctx.stroke();
+    }
+
+    this.ctx.restore();
+  }
+
   renderZombies(zombies) {
     Object.values(zombies).forEach(zombie => {
-      // Body
-      this.ctx.fillStyle = zombie.color;
-      this.ctx.beginPath();
-      this.ctx.arc(zombie.x, zombie.y, zombie.size, 0, Math.PI * 2);
-      this.ctx.fill();
-
-      this.ctx.strokeStyle = '#000';
-      this.ctx.lineWidth = zombie.isBoss ? 4 : 2;
-      this.ctx.stroke();
-
-      // Eyes
-      const eyeSize = zombie.isBoss ? 6 : 3;
-      const eyeOffset = zombie.size * 0.3;
-      this.ctx.fillStyle = '#ff0000';
-      this.ctx.beginPath();
-      this.ctx.arc(zombie.x - eyeOffset, zombie.y - 5, eyeSize, 0, Math.PI * 2);
-      this.ctx.arc(zombie.x + eyeOffset, zombie.y - 5, eyeSize, 0, Math.PI * 2);
-      this.ctx.fill();
+      // Dessiner le sprite du zombie
+      this.drawZombieSprite(zombie);
 
       // Health bar
       if (zombie.maxHealth) {
