@@ -986,11 +986,30 @@ function gameLoop() {
       const newX = zombie.x + Math.cos(angle) * zombie.speed;
       const newY = zombie.y + Math.sin(angle) * zombie.speed;
 
-      // Vérifier collision avec les murs
+      // Vérifier collision avec les murs - avec système de glissement
+      let finalX = zombie.x;
+      let finalY = zombie.y;
+
+      // Essayer de se déplacer dans les deux directions
       if (!checkWallCollision(newX, newY, zombie.size)) {
-        zombie.x = newX;
-        zombie.y = newY;
+        // Pas de collision, mouvement libre
+        finalX = newX;
+        finalY = newY;
+      } else {
+        // Collision détectée, essayer de glisser le long des murs
+        // Essayer uniquement l'axe X
+        if (!checkWallCollision(newX, zombie.y, zombie.size)) {
+          finalX = newX;
+        }
+        // Essayer uniquement l'axe Y
+        if (!checkWallCollision(zombie.x, newY, zombie.size)) {
+          finalY = newY;
+        }
       }
+
+      // Appliquer la nouvelle position
+      zombie.x = finalX;
+      zombie.y = finalY;
 
       // Vérifier collision avec joueurs
       for (let playerId in gameState.players) {
