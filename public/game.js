@@ -915,6 +915,28 @@ class PlayerController {
     this.spawnProtectionEndTime = Date.now() + CONSTANTS.SPAWN_PROTECTION.DURATION;
   }
 
+  /**
+   * Check if a position collides with any wall
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {number} size - Object size/radius
+   * @returns {boolean} - True if collision detected
+   */
+  checkWallCollision(x, y, size) {
+    const walls = this.gameState.state.walls;
+    if (!walls || !Array.isArray(walls)) return false;
+
+    for (let wall of walls) {
+      if (x + size > wall.x &&
+          x - size < wall.x + wall.width &&
+          y + size > wall.y &&
+          y - size < wall.y + wall.height) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   update(canvasWidth, canvasHeight) {
     const player = this.gameState.getPlayer();
     if (!player || !player.alive) {
@@ -960,13 +982,40 @@ class PlayerController {
         );
       }
 
-      // Client-side prediction
-      player.x = newX;
-      player.y = newY;
-      player.angle = angle;
+      // Client-side collision detection with sliding
+      let finalX = player.x;
+      let finalY = player.y;
 
-      // Send to server
-      this.network.playerMove(newX, newY, angle);
+      // Try to move in both directions
+      if (!this.checkWallCollision(newX, newY, this.gameState.config.PLAYER_SIZE)) {
+        // No collision, move freely
+        finalX = newX;
+        finalY = newY;
+      } else {
+        // Collision detected, try sliding along walls
+        // Try X-axis only
+        if (!this.checkWallCollision(newX, player.y, this.gameState.config.PLAYER_SIZE)) {
+          finalX = newX;
+        }
+        // Try Y-axis only
+        if (!this.checkWallCollision(player.x, newY, this.gameState.config.PLAYER_SIZE)) {
+          finalY = newY;
+        }
+      }
+
+      // Update player position only if it changed
+      if (finalX !== player.x || finalY !== player.y) {
+        // Client-side prediction
+        player.x = finalX;
+        player.y = finalY;
+        player.angle = angle;
+
+        // Send to server
+        this.network.playerMove(finalX, finalY, angle);
+      } else {
+        // Position didn't change, but update angle
+        player.angle = angle;
+      }
     }
   }
 
