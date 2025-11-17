@@ -16,6 +16,7 @@ const gameState = {
   bullets: {},
   powerups: {},
   particles: {},
+  poisonTrails: {},
   loot: {},
   walls: [],
   rooms: [],
@@ -25,6 +26,7 @@ const gameState = {
   nextBulletId: 0,
   nextPowerupId: 0,
   nextParticleId: 0,
+  nextPoisonTrailId: 0,
   nextLootId: 0,
   wave: 1,
   zombiesKilledThisWave: 0,
@@ -193,6 +195,20 @@ const ZOMBIE_TYPES = {
     slowRadius: 120,
     slowAmount: 0.5,
     slowDuration: 2000
+  },
+  poison: {
+    name: 'Zombie Empoisonneur',
+    health: 70,
+    speed: 2.2,
+    damage: 9,
+    color: '#22ff22',
+    size: 24,
+    goldDrop: 22,
+    xpDrop: 42,
+    poisonTrailInterval: 200, // Laisse une traînée toutes les 200ms
+    poisonDuration: 3000, // La traînée dure 3 secondes
+    poisonDamage: 2, // Dégâts par tick (toutes les 500ms)
+    poisonRadius: 35 // Rayon de la zone de poison
   },
   shooter: {
     name: 'Zombie Tireur',
@@ -666,14 +682,14 @@ function spawnSingleZombie() {
     // Vagues 1-3 : Principalement des zombies normaux
     types = ['normal', 'normal', 'normal', 'normal', 'fast', 'fast', 'tank'];
   } else if (gameState.wave <= 6) {
-    // Vagues 4-6 : Mélange équilibré avec apparition des tireurs
-    types = ['normal', 'normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'healer', 'slower', 'shooter'];
+    // Vagues 4-6 : Mélange équilibré avec apparition des tireurs et zombies poison
+    types = ['normal', 'normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'healer', 'slower', 'poison', 'shooter'];
   } else if (gameState.wave <= 10) {
-    // Vagues 7-10 : Plus de zombies spéciaux et tireurs
-    types = ['normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'slower', 'slower', 'shooter', 'shooter'];
+    // Vagues 7-10 : Plus de zombies spéciaux, tireurs et poison
+    types = ['normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'slower', 'slower', 'poison', 'poison', 'shooter', 'shooter'];
   } else {
-    // Vague 11+ : Chaos total - Beaucoup de zombies dangereux et tireurs
-    types = ['fast', 'fast', 'tank', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'healer', 'slower', 'slower', 'shooter', 'shooter', 'shooter'];
+    // Vague 11+ : Chaos total - Beaucoup de zombies dangereux, tireurs et poison
+    types = ['fast', 'fast', 'tank', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'healer', 'slower', 'slower', 'poison', 'poison', 'shooter', 'shooter', 'shooter'];
   }
   const typeKey = types[Math.floor(Math.random() * types.length)];
   const type = ZOMBIE_TYPES[typeKey];
@@ -703,7 +719,8 @@ function spawnSingleZombie() {
     xpDrop: zombieXP,
     // Attributs spéciaux
     lastHeal: typeKey === 'healer' ? Date.now() : null,
-    lastShot: typeKey === 'shooter' ? Date.now() : null
+    lastShot: typeKey === 'shooter' ? Date.now() : null,
+    lastPoisonTrail: typeKey === 'poison' ? Date.now() : null
   };
 
   gameState.zombiesSpawnedThisWave++;
@@ -1030,6 +1047,31 @@ function gameLoop() {
       }
     }
 
+    // Capacité spéciale : Zombie Poison - laisse une traînée de poison
+    if (zombie.type === 'poison') {
+      const poisonType = ZOMBIE_TYPES.poison;
+
+      // Vérifier le cooldown pour laisser une traînée
+      if (!zombie.lastPoisonTrail || now - zombie.lastPoisonTrail >= poisonType.poisonTrailInterval) {
+        zombie.lastPoisonTrail = now;
+
+        // Créer une nouvelle traînée de poison
+        const trailId = gameState.nextPoisonTrailId++;
+        gameState.poisonTrails[trailId] = {
+          id: trailId,
+          x: zombie.x,
+          y: zombie.y,
+          radius: poisonType.poisonRadius,
+          damage: poisonType.poisonDamage,
+          createdAt: now,
+          duration: poisonType.poisonDuration
+        };
+
+        // Créer des particules vertes pour l'effet visuel
+        createParticles(zombie.x, zombie.y, poisonType.color, 3);
+      }
+    }
+
     // Trouver le joueur le plus proche
     // IMPORTANT: Les zombies ignorent les joueurs sans pseudo ou avec protection de spawn
     let closestPlayer = null;
@@ -1105,6 +1147,45 @@ function gameLoop() {
             zombie.health -= thornsDamage;
           }
 
+          if (player.health <= 0) {
+            player.health = 0;
+            player.alive = false;
+          }
+        }
+      }
+    }
+  }
+
+  // Mise à jour des traînées de poison
+  for (let trailId in gameState.poisonTrails) {
+    const trail = gameState.poisonTrails[trailId];
+
+    // Nettoyer les traînées expirées (après 3 secondes)
+    if (now - trail.createdAt >= trail.duration) {
+      delete gameState.poisonTrails[trailId];
+      continue;
+    }
+
+    // Appliquer les dégâts aux joueurs qui marchent sur les traînées
+    for (let playerId in gameState.players) {
+      const player = gameState.players[playerId];
+
+      // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
+      if (!player.alive || !player.hasNickname || player.spawnProtection) {
+        continue;
+      }
+
+      const dist = distance(player.x, player.y, trail.x, trail.y);
+      if (dist < trail.radius) {
+        // Appliquer les dégâts de poison toutes les 500ms
+        if (!player.lastPoisonDamage || now - player.lastPoisonDamage >= 500) {
+          player.health -= trail.damage;
+          player.lastPoisonDamage = now;
+
+          // Créer des particules pour l'effet visuel
+          createParticles(player.x, player.y, '#22ff22', 2);
+
+          // Vérifier si le joueur est mort
           if (player.health <= 0) {
             player.health = 0;
             player.alive = false;
