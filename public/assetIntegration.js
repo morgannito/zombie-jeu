@@ -32,12 +32,19 @@
             const report = window.assetManager.getLoadReport();
             console.log('📊 Rapport de chargement:', report);
 
-            // Si aucun asset externe n'est disponible, charger les assets de démonstration
+            // Si aucun asset externe n'est disponible, charger les assets professionnels
             if (report.images.available === 0) {
-                console.log('ℹ️ Aucun asset externe trouvé - chargement des assets de démonstration');
+                console.log('ℹ️ Aucun asset externe trouvé - chargement des assets professionnels procéduraux');
                 console.log('💡 Consultez /assets/README.md pour ajouter vos propres assets');
 
-                if (typeof DemoAssetGenerator !== 'undefined') {
+                // Essayer d'utiliser le générateur professionnel en priorité
+                if (typeof ProfessionalAssetGenerator !== 'undefined') {
+                    const generator = new ProfessionalAssetGenerator();
+                    await generator.loadProfessionalAssetsIntoManager(window.assetManager);
+                    console.log('✅ Assets professionnels chargés avec succès');
+                }
+                // Fallback vers le générateur de démo basique
+                else if (typeof DemoAssetGenerator !== 'undefined') {
                     const generator = new DemoAssetGenerator();
                     await generator.loadDemoAssetsIntoManager(window.assetManager);
                     console.log('✅ Assets de démonstration chargés avec succès');
