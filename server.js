@@ -1616,7 +1616,7 @@ setInterval(spawnPowerup, CONFIG.POWERUP_SPAWN_INTERVAL);
 // Initialiser le jeu au démarrage
 initializeRooms();
 
-// Game loop à 60 FPS
+// Game loop à 30 FPS (optimisé pour réduire la charge réseau)
 setInterval(() => {
   gameLoop();
   io.emit('gameState', {
@@ -1632,7 +1632,7 @@ setInterval(() => {
     wave: gameState.wave, // MODE INFINI - afficher la vague actuelle
     zombiesRemaining: Object.keys(gameState.zombies).length
   });
-}, 1000 / 60);
+}, 1000 / 30);
 
 // Gestion des connexions Socket.IO
 io.on('connection', (socket) => {
