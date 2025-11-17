@@ -1649,6 +1649,134 @@ class Renderer {
     this.ctx.fillText(text, x, y + offsetY);
   }
 
+  // Fonction pour dessiner les sprites d'armes
+  renderWeaponSprite(x, y, angle, weaponType, isCurrentPlayer) {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(angle);
+
+    const primaryColor = isCurrentPlayer ? '#333333' : '#444444';
+    const accentColor = isCurrentPlayer ? '#00ffff' : '#ffaa00';
+
+    switch(weaponType) {
+      case 'pistol':
+        // Pistolet compact
+        // Corps de l'arme
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, -3, 18, 6);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -3, 18, 6);
+
+        // Canon
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(23, -2, 8, 4);
+        this.ctx.strokeRect(23, -2, 8, 4);
+
+        // Poignée
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, 3, 6, 8);
+        this.ctx.strokeRect(5, 3, 6, 8);
+
+        // Détail accent
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(15, -1, 3, 2);
+        break;
+
+      case 'shotgun':
+        // Shotgun à double canon
+        // Corps principal
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, -4, 25, 8);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -4, 25, 8);
+
+        // Double canon
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(30, -4, 12, 3);
+        this.ctx.fillRect(30, 1, 12, 3);
+        this.ctx.strokeRect(30, -4, 12, 3);
+        this.ctx.strokeRect(30, 1, 12, 3);
+
+        // Crosse
+        this.ctx.fillStyle = '#8B4513';
+        this.ctx.fillRect(-5, -3, 10, 6);
+        this.ctx.strokeRect(-5, -3, 10, 6);
+
+        // Pompe
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(12, -2, 8, 4);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeRect(12, -2, 8, 4);
+
+        // Détails sur les canons
+        this.ctx.fillStyle = '#ff6600';
+        this.ctx.fillRect(40, -3, 2, 1);
+        this.ctx.fillRect(40, 2, 2, 1);
+        break;
+
+      case 'machinegun':
+        // Mitraillette
+        // Corps principal
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(0, -5, 30, 10);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(0, -5, 30, 10);
+
+        // Canon avec refroidissement
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(30, -3, 15, 6);
+        this.ctx.strokeRect(30, -3, 15, 6);
+
+        // Grilles de refroidissement
+        for(let i = 0; i < 4; i++) {
+          this.ctx.fillStyle = '#00ffff';
+          this.ctx.fillRect(32 + i * 3, -2, 1, 4);
+        }
+
+        // Chargeur
+        this.ctx.fillStyle = '#444';
+        this.ctx.fillRect(10, 5, 8, 12);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeRect(10, 5, 8, 12);
+
+        // Crosse pliable
+        this.ctx.fillStyle = '#333';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(-5, -3);
+        this.ctx.lineTo(-12, -5);
+        this.ctx.lineTo(-12, 5);
+        this.ctx.lineTo(-5, 3);
+        this.ctx.stroke();
+
+        // Viseur laser
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.beginPath();
+        this.ctx.arc(45, 0, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Détails accent
+        this.ctx.fillStyle = accentColor;
+        this.ctx.fillRect(5, -3, 2, 6);
+        this.ctx.fillRect(20, -3, 2, 6);
+        break;
+
+      default:
+        // Arme par défaut (pistolet)
+        this.ctx.fillStyle = primaryColor;
+        this.ctx.fillRect(5, -3, 18, 6);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(5, -3, 18, 6);
+    }
+
+    this.ctx.restore();
+  }
+
   renderPlayers(players, currentPlayerId, config) {
     Object.entries(players).forEach(([pid, p]) => {
       const isCurrentPlayer = pid === currentPlayerId;
@@ -1672,17 +1800,9 @@ class Renderer {
       this.ctx.lineWidth = 3;
       this.ctx.stroke();
 
-      // Weapon direction
-      const weaponLength = config.PLAYER_SIZE * 2;
-      this.ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
-      this.ctx.lineWidth = 4;
-      this.ctx.beginPath();
-      this.ctx.moveTo(p.x, p.y);
-      this.ctx.lineTo(
-        p.x + Math.cos(p.angle) * weaponLength,
-        p.y + Math.sin(p.angle) * weaponLength
-      );
-      this.ctx.stroke();
+      // Render weapon sprite
+      const weaponType = p.weapon || 'pistol';
+      this.renderWeaponSprite(p.x, p.y, p.angle, weaponType, isCurrentPlayer);
 
       // Player name bubble with nickname
       const nickname = p.nickname || (isCurrentPlayer ? 'Vous' : 'Joueur');
