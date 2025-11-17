@@ -67,101 +67,37 @@
     };
 
     // ===============================================
-    // PATCH 3: Rendu personnalisé des joueurs
+    // PATCH 3: Améliorer le rendu des joueurs avec skins
     // ===============================================
-    const originalRenderPlayers = Renderer.prototype.renderPlayers;
-    Renderer.prototype.renderPlayers = function(players, currentPlayerId, config) {
-      Object.entries(players).forEach(([pid, p]) => {
-        const isCurrentPlayer = pid === currentPlayerId;
-        if (!p.alive) return;
-
-        // Speed effect
-        if (p.speedBoost && Date.now() < p.speedBoost) {
-          this.ctx.shadowBlur = 20;
-          this.ctx.shadowColor = '#00ffff';
-        }
-
-        // Utiliser le système de skins si disponible
-        if (window.renderPlayer && window.skinManager) {
-          window.renderPlayer(this.ctx, p.x, p.y, config.PLAYER_SIZE);
-        } else {
-          // Rendu par défaut
-          this.ctx.fillStyle = isCurrentPlayer ? '#00ff00' : '#00aaff';
-          this.ctx.strokeStyle = '#fff';
-          this.ctx.lineWidth = 3;
-          this.ctx.beginPath();
-          this.ctx.arc(p.x, p.y, config.PLAYER_SIZE, 0, Math.PI * 2);
-          this.ctx.fill();
-          this.ctx.stroke();
-        }
-
-        this.ctx.shadowBlur = 0;
-
-        // Direction indicator (weapon)
-        const weaponLength = config.PLAYER_SIZE + 15;
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 4;
-        this.ctx.beginPath();
-        this.ctx.moveTo(p.x, p.y);
-        this.ctx.lineTo(
-          p.x + Math.cos(p.angle) * weaponLength,
-          p.y + Math.sin(p.angle) * weaponLength
-        );
-        this.ctx.stroke();
-
-        // Player name bubble with nickname
-        const nickname = p.nickname || (isCurrentPlayer ? 'Vous' : 'Joueur');
-        const playerLabel = `${nickname} (Lv${p.level || 1})`;
-        this.renderPlayerNameBubble(p.x, p.y, playerLabel, isCurrentPlayer, -config.PLAYER_SIZE - 25);
-
-        // Health bar
-        const healthPercent = p.health / p.maxHealth;
-        this.ctx.fillStyle = healthPercent > 0.5 ? '#00ff00' : healthPercent > 0.25 ? '#ffff00' : '#ff0000';
-        this.ctx.fillRect(p.x - 20, p.y + config.PLAYER_SIZE + 5, 40 * healthPercent, 5);
-        this.ctx.strokeStyle = '#fff';
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(p.x - 20, p.y + config.PLAYER_SIZE + 5, 40, 5);
-      });
-    };
+    // Note: On ne remplace PAS complètement renderPlayers car
+    // l'implémentation originale est déjà complète dans game.js
+    // On laisse l'original gérer tout le rendu
 
     // ===============================================
-    // PATCH 4: Rendu personnalisé des balles
+    // PATCH 4: Améliorer le rendu des balles avec skins
     // ===============================================
-    const originalRenderBullets = Renderer.prototype.renderBullets;
-    Renderer.prototype.renderBullets = function(bullets, config) {
-      Object.values(bullets).forEach(b => {
-        // Utiliser le système de skins si disponible
-        if (window.renderBullet && window.skinManager) {
-          window.renderBullet(this.ctx, b.x, b.y, 4);
-        } else {
-          // Rendu par défaut
-          this.ctx.fillStyle = b.color || '#fff';
-          this.ctx.beginPath();
-          this.ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-          this.ctx.fill();
-        }
-      });
-    };
+    // Note: On ne remplace PAS complètement renderBullets car
+    // l'implémentation originale est déjà complète dans game.js
+    // On laisse l'original gérer tout le rendu avec les effets de lumière
 
     // ===============================================
     // PATCH 5: Intercepter le tir pour les effets
     // ===============================================
     const originalShoot = PlayerController.prototype.shoot;
     PlayerController.prototype.shoot = function(canvasWidth, canvasHeight) {
-      const result = originalShoot.call(this, canvasWidth, canvasHeight);
+      // Appeler la méthode originale
+      originalShoot.call(this, canvasWidth, canvasHeight);
 
-      // Effets lors du tir
-      if (result && window.gameState) {
+      // Effets lors du tir (après l'appel original)
+      if (window.gameState) {
         const player = window.gameState.getPlayer();
-        if (player) {
+        if (player && player.alive) {
           const weaponType = player.weapon || 'pistol';
           if (window.onPlayerShoot) {
             window.onPlayerShoot(player.x, player.y, player.angle, weaponType);
           }
         }
       }
-
-      return result;
     };
 
     // ===============================================
