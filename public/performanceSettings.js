@@ -19,7 +19,9 @@ class PerformanceSettingsManager {
       shadowsEnabled: true,
       immersiveMode: false, // Hide non-essential UI
       minimapPosition: 'right', // 'right', 'left', 'hidden'
-      fullscreenEnabled: false // Fullscreen mode
+      fullscreenEnabled: false, // Fullscreen mode
+      minimapSize: 'medium', // 'small', 'medium', 'large' (mobile only)
+      minimapOpacity: 0.8 // 0.3 to 1.0
     };
 
     this.currentFPS = 60;
@@ -110,6 +112,9 @@ class PerformanceSettingsManager {
 
     // Fullscreen toggle button
     this.createFullscreenButton();
+
+    // Minimap toggle button (for mobile)
+    this.createMinimapToggleButton();
 
     // Listen for fullscreen changes (e.g., when user presses ESC)
     this.setupFullscreenListeners();
@@ -227,6 +232,28 @@ class PerformanceSettingsManager {
             <option value="hidden" ${this.settings.minimapPosition === 'hidden' ? 'selected' : ''}>Masquée</option>
           </select>
         </div>
+
+        <div class="setting-item" style="margin-top: 15px;">
+          <label style="color: #fff; display: block; margin-bottom: 5px;">
+            Taille Minimap (Mobile):
+          </label>
+          <select id="minimap-size-select" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 2px solid #00ff00; border-radius: 5px;">
+            <option value="small" ${this.settings.minimapSize === 'small' ? 'selected' : ''}>Petite (50px)</option>
+            <option value="medium" ${this.settings.minimapSize === 'medium' ? 'selected' : ''}>Moyenne (80px)</option>
+            <option value="large" ${this.settings.minimapSize === 'large' ? 'selected' : ''}>Grande (120px)</option>
+          </select>
+        </div>
+
+        <div class="setting-item" style="margin-top: 15px;">
+          <label style="color: #fff; display: block; margin-bottom: 5px;">
+            Opacité Minimap: <span id="minimap-opacity-value">${Math.round(this.settings.minimapOpacity * 100)}%</span>
+          </label>
+          <input type="range" id="minimap-opacity-slider" min="30" max="100" value="${this.settings.minimapOpacity * 100}"
+                 style="width: 100%;">
+          <p style="color: #aaa; font-size: 12px; margin: 5px 0 0 0;">
+            Ajustez la transparence de la minimap
+          </p>
+        </div>
       </div>
 
       <div class="settings-section" style="margin-top: 20px;">
@@ -288,6 +315,11 @@ class PerformanceSettingsManager {
     // Real-time resolution slider update
     document.getElementById('resolution-slider').addEventListener('input', (e) => {
       document.getElementById('resolution-value').textContent = e.target.value + '%';
+    });
+
+    // Real-time minimap opacity slider update
+    document.getElementById('minimap-opacity-slider').addEventListener('input', (e) => {
+      document.getElementById('minimap-opacity-value').textContent = e.target.value + '%';
     });
 
     // Performance mode presets
@@ -450,6 +482,83 @@ class PerformanceSettingsManager {
   }
 
   /**
+   * Create minimap toggle button (mobile)
+   */
+  createMinimapToggleButton() {
+    const isMobile = this.isMobile();
+    if (!isMobile) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'minimap-toggle-btn';
+    btn.innerHTML = '🗺️';
+    btn.title = 'Afficher/Masquer la Minimap';
+    btn.style.cssText = `
+      position: fixed;
+      bottom: 70px;
+      right: 10px;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid #00ccff;
+      border-radius: 8px;
+      width: 45px;
+      height: 45px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+    `;
+
+    btn.addEventListener('click', () => {
+      // Toggle between hidden and last known position
+      if (this.settings.minimapPosition === 'hidden') {
+        this.settings.minimapPosition = this.lastMinimapPosition || 'right';
+      } else {
+        this.lastMinimapPosition = this.settings.minimapPosition;
+        this.settings.minimapPosition = 'hidden';
+      }
+
+      this.applyMinimapSettings();
+      this.saveSettings();
+      this.updateMinimapToggleButton();
+
+      // Update select if panel is open
+      const select = document.getElementById('minimap-position-select');
+      if (select) {
+        select.value = this.settings.minimapPosition;
+      }
+    });
+
+    document.body.appendChild(btn);
+
+    // Apply initial state
+    this.updateMinimapToggleButton();
+  }
+
+  /**
+   * Update minimap toggle button appearance
+   */
+  updateMinimapToggleButton() {
+    const btn = document.getElementById('minimap-toggle-btn');
+    if (!btn) return;
+
+    const isHidden = this.settings.minimapPosition === 'hidden';
+
+    if (isHidden) {
+      btn.innerHTML = '🗺️';
+      btn.title = 'Afficher la Minimap';
+      btn.style.background = 'rgba(0, 0, 0, 0.8)';
+      btn.style.borderColor = '#666';
+      btn.style.opacity = '0.6';
+    } else {
+      btn.innerHTML = '🗺️';
+      btn.title = 'Masquer la Minimap';
+      btn.style.background = 'rgba(0, 204, 255, 0.3)';
+      btn.style.borderColor = '#00ccff';
+      btn.style.opacity = '1';
+    }
+  }
+
+  /**
    * Setup fullscreen event listeners
    */
   setupFullscreenListeners() {
@@ -516,6 +625,8 @@ class PerformanceSettingsManager {
     const minimapPosition = document.getElementById('minimap-position-select').value;
     const autoAdjust = document.getElementById('auto-adjust-checkbox').checked;
     const fullscreenEnabled = document.getElementById('fullscreen-checkbox').checked;
+    const minimapSize = document.getElementById('minimap-size-select').value;
+    const minimapOpacity = parseInt(document.getElementById('minimap-opacity-slider').value) / 100;
 
     this.settings = {
       performanceMode: perfMode,
@@ -526,7 +637,9 @@ class PerformanceSettingsManager {
       shadowsEnabled: this.settings.shadowsEnabled,
       immersiveMode,
       minimapPosition,
-      fullscreenEnabled
+      fullscreenEnabled,
+      minimapSize,
+      minimapOpacity
     };
 
     this.autoAdjust = autoAdjust;
@@ -542,8 +655,8 @@ class PerformanceSettingsManager {
     // Apply immersive mode
     this.applyImmersiveMode();
 
-    // Apply minimap position
-    this.applyMinimapPosition();
+    // Apply minimap settings (position, size, opacity)
+    this.applyMinimapSettings();
 
     // Apply fullscreen mode
     this.applyFullscreen();
@@ -603,16 +716,18 @@ class PerformanceSettingsManager {
   }
 
   /**
-   * Apply minimap position
+   * Apply minimap settings (position, size, opacity)
    */
-  applyMinimapPosition() {
+  applyMinimapSettings() {
     const minimap = document.getElementById('minimap');
     if (!minimap) return;
 
     minimap.style.transition = 'all 0.3s ease';
 
+    // Position
     if (this.settings.minimapPosition === 'hidden') {
       minimap.style.display = 'none';
+      return; // No need to apply other settings if hidden
     } else {
       minimap.style.display = 'block';
 
@@ -624,6 +739,34 @@ class PerformanceSettingsManager {
         minimap.style.left = 'auto';
       }
     }
+
+    // Opacity
+    minimap.style.opacity = this.settings.minimapOpacity;
+
+    // Size (only on mobile)
+    const isMobile = this.isMobile();
+    if (isMobile) {
+      const sizeMap = {
+        'small': '50px',
+        'medium': '80px',
+        'large': '120px'
+      };
+      const size = sizeMap[this.settings.minimapSize] || '80px';
+      minimap.style.width = size;
+      minimap.style.height = size;
+
+      // Also update canvas dimensions
+      if (window.gameEngine) {
+        window.gameEngine.resizeMinimapCanvas();
+      }
+    }
+  }
+
+  /**
+   * Apply minimap position (kept for backwards compatibility)
+   */
+  applyMinimapPosition() {
+    this.applyMinimapSettings();
   }
 
   /**
