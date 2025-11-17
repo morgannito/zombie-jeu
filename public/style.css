@@ -1183,11 +1183,6 @@ body {
     display: none;
   }
 
-  /* Hide skins button on mobile */
-  #open-skins-btn {
-    display: none !important;
-  }
-
   #joystick-container {
     bottom: 0.75rem;
     left: 0.75rem;
