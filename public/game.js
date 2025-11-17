@@ -1096,6 +1096,7 @@ class Renderer {
     this.renderPowerups(gameState.state.powerups, gameState.powerupTypes, gameState.config);
     this.renderLoot(gameState.state.loot, gameState.config);
     this.renderParticles(gameState.state.particles);
+    this.renderPoisonTrails(gameState.state.poisonTrails);
     this.renderBullets(gameState.state.bullets, gameState.config);
     this.renderZombies(gameState.state.zombies);
     this.renderPlayers(gameState.state.players, playerId, gameState.config);
@@ -1229,6 +1230,40 @@ class Renderer {
       this.ctx.beginPath();
       this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
       this.ctx.fill();
+      this.ctx.globalAlpha = 1;
+    });
+  }
+
+  renderPoisonTrails(poisonTrails) {
+    const now = Date.now();
+    Object.values(poisonTrails || {}).forEach(trail => {
+      // Effet de pulsation pour montrer que c'est toxique
+      const pulseAmount = Math.sin(now / 300) * 0.1;
+      const age = now - trail.createdAt;
+      const fadeAmount = Math.max(0, 1 - (age / trail.duration));
+
+      // Cercle extérieur (plus transparent)
+      this.ctx.fillStyle = '#22ff22';
+      this.ctx.globalAlpha = (0.15 + pulseAmount) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(trail.x, trail.y, trail.radius, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Cercle intérieur (plus visible)
+      this.ctx.fillStyle = '#11dd11';
+      this.ctx.globalAlpha = (0.3 + pulseAmount * 0.5) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(trail.x, trail.y, trail.radius * 0.6, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Contour pulsant
+      this.ctx.strokeStyle = '#00ff00';
+      this.ctx.lineWidth = 2;
+      this.ctx.globalAlpha = (0.4 + pulseAmount) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(trail.x, trail.y, trail.radius, 0, Math.PI * 2);
+      this.ctx.stroke();
+
       this.ctx.globalAlpha = 1;
     });
   }
@@ -1389,6 +1424,33 @@ class Renderer {
       this.ctx.arc(0, 0, headRadius + 3, 0, Math.PI * 2);
       this.ctx.stroke();
       this.ctx.globalAlpha = 1;
+    } else if (zombie.type === 'poison') {
+      // Aura toxique verte pulsante
+      const pulseAmount = Math.sin(Date.now() / 200) * 0.15;
+      this.ctx.strokeStyle = '#22ff22';
+      this.ctx.lineWidth = 2;
+      this.ctx.globalAlpha = 0.4 + pulseAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, headRadius + 5, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 0.25 + pulseAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, headRadius + 8, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 1;
+
+      // Gouttes de poison sur le corps
+      this.ctx.fillStyle = '#00aa00';
+      const dropPositions = [
+        { x: -bodyWidth / 3, y: bodyHeight / 4 },
+        { x: bodyWidth / 4, y: bodyHeight / 3 },
+        { x: 0, y: -bodyHeight / 4 }
+      ];
+      dropPositions.forEach(pos => {
+        this.ctx.beginPath();
+        this.ctx.ellipse(pos.x, pos.y, 2 * scale, 3 * scale, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+      });
     } else if (zombie.type === 'shooter') {
       // Fusil/Arme sur le zombie tireur
       this.ctx.fillStyle = '#333';
@@ -1524,6 +1586,21 @@ class Renderer {
       this.ctx.lineWidth = 2;
       this.ctx.strokeText('⏱', zombie.x, zombie.y);
       this.ctx.fillText('⏱', zombie.x, zombie.y);
+    } else if (zombie.type === 'poison') {
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.4 + Math.sin(Date.now() / 200) * 0.15;
+      this.ctx.strokeStyle = '#22ff22';
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 10, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      this.ctx.fillStyle = '#22ff22';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeText('☠', zombie.x, zombie.y);
+      this.ctx.fillText('☠', zombie.x, zombie.y);
     }
   }
 

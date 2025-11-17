@@ -222,6 +222,8 @@
         explosive: '#ff00ff',
         healer: '#00ffff',
         slower: '#8800ff',
+        poison: '#22ff22',
+        shooter: '#ff9900',
         boss: '#ff0000'
       };
       return colors[type] || '#00ff00';
