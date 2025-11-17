@@ -923,6 +923,11 @@ function gameLoop() {
       player.spawnProtection = false;
     }
 
+    // Vérifier l'expiration de l'invincibilité après upgrade
+    if (player.invincible && now > player.invincibleEndTime) {
+      player.invincible = false;
+    }
+
     // Retour au pistolet si l'arme spéciale a expiré
     if (player.weaponTimer && now > player.weaponTimer) {
       player.weapon = 'pistol';
@@ -1053,8 +1058,8 @@ function gameLoop() {
 
         for (let playerId in gameState.players) {
           const player = gameState.players[playerId];
-          // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
-          if (!player.alive || !player.hasNickname || player.spawnProtection) {
+          // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
+          if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
             continue;
           }
 
@@ -1122,15 +1127,15 @@ function gameLoop() {
     }
 
     // Trouver le joueur le plus proche
-    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo ou avec protection de spawn
+    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo, avec protection de spawn, ou invincibles
     let closestPlayer = null;
     let closestDistance = Infinity;
 
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
 
-      // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
-      if (!player.alive || !player.hasNickname || player.spawnProtection) {
+      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
+      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
         continue;
       }
 
@@ -1176,8 +1181,8 @@ function gameLoop() {
       for (let playerId in gameState.players) {
         const player = gameState.players[playerId];
 
-        // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
-        if (!player.alive || !player.hasNickname || player.spawnProtection) {
+        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
+        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
           continue;
         }
 
@@ -1219,8 +1224,8 @@ function gameLoop() {
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
 
-      // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
-      if (!player.alive || !player.hasNickname || player.spawnProtection) {
+      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
+      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
         continue;
       }
 
@@ -1264,8 +1269,8 @@ function gameLoop() {
       for (let playerId in gameState.players) {
         const player = gameState.players[playerId];
 
-        // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
-        if (!player.alive || !player.hasNickname || player.spawnProtection) {
+        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
+        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
           continue;
         }
 
@@ -1374,8 +1379,8 @@ function gameLoop() {
             // Infliger des dégâts à tous les joueurs dans le rayon
             for (let playerId in gameState.players) {
               const player = gameState.players[playerId];
-              // Ignorer les joueurs morts, sans pseudo, ou avec protection de spawn
-              if (player.alive && player.hasNickname && !player.spawnProtection) {
+              // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
+              if (player.alive && player.hasNickname && !player.spawnProtection && !player.invincible) {
                 const dist = distance(zombie.x, zombie.y, player.x, player.y);
                 if (dist < explosionType.explosionRadius) {
                   player.health -= explosionType.explosionDamage;
@@ -1645,6 +1650,8 @@ io.on('connection', (socket) => {
     hasNickname: false, // Le joueur n'a pas encore choisi de pseudo
     spawnProtection: false, // Protection de spawn inactive
     spawnProtectionEndTime: 0, // Fin de la protection
+    invincible: false, // Invincibilité après upgrade
+    invincibleEndTime: 0, // Fin de l'invincibilité
     x: CONFIG.ROOM_WIDTH / 2,
     y: CONFIG.ROOM_HEIGHT - 100,
     health: CONFIG.PLAYER_MAX_HEALTH,
@@ -1794,6 +1801,8 @@ io.on('connection', (socket) => {
       player.hasNickname = false;
       player.spawnProtection = false;
       player.spawnProtectionEndTime = 0;
+      player.invincible = false;
+      player.invincibleEndTime = 0;
       player.x = CONFIG.ROOM_WIDTH / 2;
       player.y = CONFIG.ROOM_HEIGHT - 100;
       player.health = totalMaxHealth;
@@ -1831,6 +1840,10 @@ io.on('connection', (socket) => {
 
     // Appliquer l'effet de l'upgrade
     upgrade.effect(player);
+
+    // Activer l'invincibilité pendant 5 secondes
+    player.invincible = true;
+    player.invincibleEndTime = Date.now() + 5000; // 5 secondes
 
     socket.emit('upgradeSelected', { success: true, upgradeId });
   });
