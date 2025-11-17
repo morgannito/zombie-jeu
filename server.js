@@ -1030,9 +1030,9 @@ function gameLoop() {
       player.spawnProtection = false;
     }
 
-    // Vérifier l'expiration de l'invincibilité après upgrade
-    if (player.invincible && now > player.invincibleEndTime) {
-      player.invincible = false;
+    // Vérifier l'expiration de l'invisibilité après upgrade
+    if (player.invisible && now > player.invisibleEndTime) {
+      player.invisible = false;
     }
 
     // Retour au pistolet si l'arme spéciale a expiré
@@ -1174,8 +1174,8 @@ function gameLoop() {
 
         for (let playerId in gameState.players) {
           const player = gameState.players[playerId];
-          // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
-          if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
+          // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+          if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
             continue;
           }
 
@@ -1243,15 +1243,15 @@ function gameLoop() {
     }
 
     // Trouver le joueur le plus proche
-    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo, avec protection de spawn, ou invincibles
+    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo, avec protection de spawn, ou invisibles
     let closestPlayer = null;
     let closestDistance = Infinity;
 
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
 
-      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
-      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
+      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
         continue;
       }
 
@@ -1262,7 +1262,7 @@ function gameLoop() {
       }
     }
 
-    // Déplacer le zombie vers le joueur
+    // Déplacer le zombie vers le joueur ou de manière aléatoire
     if (closestPlayer) {
       const angle = Math.atan2(closestPlayer.y - zombie.y, closestPlayer.x - zombie.x);
       const newX = zombie.x + Math.cos(angle) * zombie.speed;
@@ -1297,8 +1297,8 @@ function gameLoop() {
       for (let playerId in gameState.players) {
         const player = gameState.players[playerId];
 
-        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
-        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
+        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
           continue;
         }
 
@@ -1323,6 +1323,34 @@ function gameLoop() {
           }
         }
       }
+    } else {
+      // Aucun joueur visible - mouvement aléatoire
+      // Changer de direction aléatoire toutes les 2 secondes
+      if (!zombie.randomMoveTimer || now - zombie.randomMoveTimer > 2000) {
+        zombie.randomAngle = Math.random() * Math.PI * 2;
+        zombie.randomMoveTimer = now;
+      }
+
+      const newX = zombie.x + Math.cos(zombie.randomAngle) * zombie.speed;
+      const newY = zombie.y + Math.sin(zombie.randomAngle) * zombie.speed;
+
+      // Vérifier collision avec les murs - avec système de glissement
+      let finalX = zombie.x;
+      let finalY = zombie.y;
+
+      // Essayer de se déplacer dans les deux directions
+      if (!checkWallCollision(newX, newY, zombie.size)) {
+        // Pas de collision, mouvement libre
+        finalX = newX;
+        finalY = newY;
+      } else {
+        // Collision détectée, changer de direction aléatoire
+        zombie.randomAngle = Math.random() * Math.PI * 2;
+      }
+
+      // Appliquer la nouvelle position
+      zombie.x = finalX;
+      zombie.y = finalY;
     }
   }
 
@@ -1340,8 +1368,8 @@ function gameLoop() {
     for (let playerId in gameState.players) {
       const player = gameState.players[playerId];
 
-      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
-      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
+      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
         continue;
       }
 
@@ -1396,8 +1424,8 @@ function gameLoop() {
       for (let playerId in gameState.players) {
         const player = gameState.players[playerId];
 
-        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
-        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invincible) {
+        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
           continue;
         }
 
@@ -1506,8 +1534,8 @@ function gameLoop() {
             // Infliger des dégâts à tous les joueurs dans le rayon
             for (let playerId in gameState.players) {
               const player = gameState.players[playerId];
-              // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invincibles
-              if (player.alive && player.hasNickname && !player.spawnProtection && !player.invincible) {
+              // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+              if (player.alive && player.hasNickname && !player.spawnProtection && !player.invisible) {
                 const dist = distance(zombie.x, zombie.y, player.x, player.y);
                 if (dist < explosionType.explosionRadius) {
                   player.health -= explosionType.explosionDamage;
@@ -1758,6 +1786,10 @@ function gameLoop() {
           // Générer 3 choix d'upgrades
           const upgradeChoices = generateUpgradeChoices();
 
+          // Activer l'invisibilité - le joueur devient invisible tant qu'il n'a pas choisi d'amélioration
+          player.invisible = true;
+          player.invisibleEndTime = Infinity; // Invisible jusqu'à ce qu'il choisisse une amélioration
+
           io.to(playerId).emit('levelUp', {
             newLevel: player.level,
             upgradeChoices: upgradeChoices,
@@ -1852,8 +1884,8 @@ io.on('connection', (socket) => {
     hasNickname: false, // Le joueur n'a pas encore choisi de pseudo
     spawnProtection: false, // Protection de spawn inactive
     spawnProtectionEndTime: 0, // Fin de la protection
-    invincible: false, // Invincibilité après upgrade
-    invincibleEndTime: 0, // Fin de l'invincibilité
+    invisible: false, // Invisibilité après upgrade ou lors du level up
+    invisibleEndTime: 0, // Fin de l'invisibilité
     lastActivityTime: Date.now(), // Pour détecter l'inactivité
     x: CONFIG.ROOM_WIDTH / 2,
     y: CONFIG.ROOM_HEIGHT - 100,
@@ -2053,8 +2085,8 @@ io.on('connection', (socket) => {
       player.hasNickname = false;
       player.spawnProtection = false;
       player.spawnProtectionEndTime = 0;
-      player.invincible = false;
-      player.invincibleEndTime = 0;
+      player.invisible = false;
+      player.invisibleEndTime = 0;
       player.x = CONFIG.ROOM_WIDTH / 2;
       player.y = CONFIG.ROOM_HEIGHT - 100;
       player.health = totalMaxHealth;
@@ -2095,9 +2127,9 @@ io.on('connection', (socket) => {
     // Appliquer l'effet de l'upgrade
     upgrade.effect(player);
 
-    // Activer l'invincibilité pendant 5 secondes
-    player.invincible = true;
-    player.invincibleEndTime = Date.now() + 5000; // 5 secondes
+    // Désactiver l'invisibilité - le joueur redevient visible dès qu'il choisit une amélioration
+    player.invisible = false;
+    player.invisibleEndTime = 0;
 
     socket.emit('upgradeSelected', { success: true, upgradeId });
   });
@@ -2199,28 +2231,28 @@ io.on('connection', (socket) => {
     console.log(`${player.nickname || socket.id} n'a plus de protection de spawn`);
   });
 
-  // Ouverture du shop - activer l'invincibilité
+  // Ouverture du shop - activer l'invisibilité
   socket.on('shopOpened', () => {
     const player = gameState.players[socket.id];
     if (!player) return;
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
-    player.invincible = true;
-    player.invincibleEndTime = Infinity; // Invincibilité sans limite de temps
-    console.log(`${player.nickname || socket.id} est invincible (shop ouvert)`);
+    player.invisible = true;
+    player.invisibleEndTime = Infinity; // Invisibilité sans limite de temps
+    console.log(`${player.nickname || socket.id} est invisible (shop ouvert)`);
   });
 
-  // Fermeture du shop - désactiver l'invincibilité
+  // Fermeture du shop - désactiver l'invisibilité
   socket.on('shopClosed', () => {
     const player = gameState.players[socket.id];
     if (!player) return;
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
-    player.invincible = false;
-    player.invincibleEndTime = 0;
-    console.log(`${player.nickname || socket.id} n'est plus invincible (shop fermé)`);
+    player.invisible = false;
+    player.invisibleEndTime = 0;
+    console.log(`${player.nickname || socket.id} n'est plus invisible (shop fermé)`);
   });
 
   // Déconnexion du joueur
