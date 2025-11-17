@@ -750,15 +750,29 @@ class CameraManager {
   constructor() {
     this.x = 0;
     this.y = 0;
+    this.width = 0;
+    this.height = 0;
   }
 
   follow(player, canvasWidth, canvasHeight) {
     this.x = player.x - canvasWidth / 2;
     this.y = player.y - canvasHeight / 2;
+    this.width = canvasWidth;
+    this.height = canvasHeight;
   }
 
   getPosition() {
     return { x: this.x, y: this.y };
+  }
+
+  // Vérifie si une entité est visible dans le viewport avec une marge
+  isInViewport(x, y, margin = 100) {
+    return (
+      x + margin >= this.x &&
+      x - margin <= this.x + this.width &&
+      y + margin >= this.y &&
+      y - margin <= this.y + this.height
+    );
   }
 }
 
@@ -1054,10 +1068,54 @@ class Renderer {
     this.minimapCtx = minimapCtx;
     this.camera = null;
     this.performanceSettings = null; // Will be set by GameEngine
+    this.gridCanvas = null; // Offscreen canvas for grid optimization
+    this.gridConfig = null; // Store config to detect changes
   }
 
   setCamera(camera) {
     this.camera = camera;
+  }
+
+  // Crée un canvas offscreen pour la grille (optimisation)
+  createGridCanvas(config) {
+    // Si déjà créé avec la même config, ne pas recréer
+    if (this.gridCanvas && this.gridConfig &&
+        this.gridConfig.ROOM_WIDTH === config.ROOM_WIDTH &&
+        this.gridConfig.ROOM_HEIGHT === config.ROOM_HEIGHT) {
+      return;
+    }
+
+    // Créer un nouveau canvas offscreen
+    this.gridCanvas = document.createElement('canvas');
+    this.gridCanvas.width = config.ROOM_WIDTH;
+    this.gridCanvas.height = config.ROOM_HEIGHT;
+    const gridCtx = this.gridCanvas.getContext('2d');
+
+    // Dessiner la grille sur le canvas offscreen
+    gridCtx.strokeStyle = '#252541';
+    gridCtx.lineWidth = 1;
+
+    const gridSize = CONSTANTS.CANVAS.GRID_SIZE;
+
+    for (let x = 0; x < config.ROOM_WIDTH; x += gridSize) {
+      gridCtx.beginPath();
+      gridCtx.moveTo(x, 0);
+      gridCtx.lineTo(x, config.ROOM_HEIGHT);
+      gridCtx.stroke();
+    }
+
+    for (let y = 0; y < config.ROOM_HEIGHT; y += gridSize) {
+      gridCtx.beginPath();
+      gridCtx.moveTo(0, y);
+      gridCtx.lineTo(config.ROOM_WIDTH, y);
+      gridCtx.stroke();
+    }
+
+    // Sauvegarder la config
+    this.gridConfig = {
+      ROOM_WIDTH: config.ROOM_WIDTH,
+      ROOM_HEIGHT: config.ROOM_HEIGHT
+    };
   }
 
   clear() {
@@ -1070,6 +1128,10 @@ class Renderer {
 
   render(gameState, playerId) {
     this.clear();
+
+    // Cache timestamps for performance (calculate once per frame)
+    const timestamp = performance.now();
+    const dateNow = Date.now();
 
     // Scale context for Retina displays (canvas is already physically sized × pixelRatio)
     // This allows us to draw in CSS pixels while the canvas renders at device pixels
@@ -1094,14 +1156,14 @@ class Renderer {
     this.renderGrid(gameState.config);
     this.renderWalls(gameState.state.walls);
     this.renderDoors(gameState.state.doors);
-    this.renderPowerups(gameState.state.powerups, gameState.powerupTypes, gameState.config);
-    this.renderLoot(gameState.state.loot, gameState.config);
+    this.renderPowerups(gameState.state.powerups, gameState.powerupTypes, gameState.config, dateNow);
+    this.renderLoot(gameState.state.loot, gameState.config, dateNow);
     this.renderParticles(gameState.state.particles);
-    this.renderPoisonTrails(gameState.state.poisonTrails);
-    this.renderExplosions(gameState.state.explosions);
+    this.renderPoisonTrails(gameState.state.poisonTrails, dateNow);
+    this.renderExplosions(gameState.state.explosions, dateNow);
     this.renderBullets(gameState.state.bullets, gameState.config);
-    this.renderZombies(gameState.state.zombies);
-    this.renderPlayers(gameState.state.players, playerId, gameState.config);
+    this.renderZombies(gameState.state.zombies, timestamp);
+    this.renderPlayers(gameState.state.players, playerId, gameState.config, dateNow, timestamp);
     this.renderTargetIndicator(player); // Show auto-shoot target indicator
 
     this.ctx.restore();
@@ -1131,24 +1193,13 @@ class Renderer {
       return; // Skip grid rendering in performance mode
     }
 
-    this.ctx.strokeStyle = '#252541';
-    this.ctx.lineWidth = 1;
-
-    const gridSize = CONSTANTS.CANVAS.GRID_SIZE;
-
-    for (let x = 0; x < config.ROOM_WIDTH; x += gridSize) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, config.ROOM_HEIGHT);
-      this.ctx.stroke();
+    // Créer le canvas de grille si pas encore fait
+    if (!this.gridCanvas) {
+      this.createGridCanvas(config);
     }
 
-    for (let y = 0; y < config.ROOM_HEIGHT; y += gridSize) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(0, y);
-      this.ctx.lineTo(config.ROOM_WIDTH, y);
-      this.ctx.stroke();
-    }
+    // Dessiner le canvas de grille pré-rendu (beaucoup plus rapide)
+    this.ctx.drawImage(this.gridCanvas, 0, 0);
   }
 
   renderWalls(walls) {
@@ -1176,12 +1227,12 @@ class Renderer {
     });
   }
 
-  renderPowerups(powerups, powerupTypes, config) {
+  renderPowerups(powerups, powerupTypes, config, now = Date.now()) {
     Object.values(powerups).forEach(powerup => {
       const type = powerupTypes[powerup.type];
       if (!type) return;
 
-      const pulse = Math.sin(Date.now() / 200) * 3 + config.POWERUP_SIZE;
+      const pulse = Math.sin(now / 200) * 3 + config.POWERUP_SIZE;
 
       this.ctx.fillStyle = type.color;
       this.ctx.beginPath();
@@ -1210,9 +1261,9 @@ class Renderer {
     });
   }
 
-  renderLoot(loot, config) {
+  renderLoot(loot, config, now = Date.now()) {
     Object.values(loot).forEach(item => {
-      const rotation = (Date.now() / 500) % (Math.PI * 2);
+      const rotation = (now / 500) % (Math.PI * 2);
 
       this.ctx.save();
       this.ctx.translate(item.x, item.y);
@@ -1238,6 +1289,11 @@ class Renderer {
     }
 
     Object.values(particles).forEach(particle => {
+      // Viewport culling
+      if (!this.camera.isInViewport(particle.x, particle.y, 50)) {
+        return;
+      }
+
       this.ctx.fillStyle = particle.color;
       this.ctx.globalAlpha = 0.7;
       this.ctx.beginPath();
@@ -1247,9 +1303,13 @@ class Renderer {
     });
   }
 
-  renderPoisonTrails(poisonTrails) {
-    const now = Date.now();
+  renderPoisonTrails(poisonTrails, now = Date.now()) {
     Object.values(poisonTrails || {}).forEach(trail => {
+      // Viewport culling
+      if (!this.camera.isInViewport(trail.x, trail.y, trail.radius * 2)) {
+        return;
+      }
+
       // Effet de pulsation pour montrer que c'est toxique
       const pulseAmount = Math.sin(now / 300) * 0.1;
       const age = now - trail.createdAt;
@@ -1281,14 +1341,18 @@ class Renderer {
     });
   }
 
-  renderExplosions(explosions) {
-    const now = Date.now();
+  renderExplosions(explosions, now = Date.now()) {
     Object.values(explosions || {}).forEach(explosion => {
       const age = now - explosion.createdAt;
       const progress = age / explosion.duration;
 
       // Ne pas afficher si l'explosion est terminée
       if (progress >= 1) return;
+
+      // Viewport culling
+      if (!this.camera.isInViewport(explosion.x, explosion.y, explosion.radius * 2)) {
+        return;
+      }
 
       // Animation d'expansion
       const currentRadius = explosion.radius * (0.3 + progress * 0.7);
@@ -1372,6 +1436,11 @@ class Renderer {
 
   renderBullets(bullets, config) {
     Object.values(bullets).forEach(bullet => {
+      // Viewport culling
+      if (!this.camera.isInViewport(bullet.x, bullet.y, 50)) {
+        return;
+      }
+
       const bulletSize = bullet.size || config.BULLET_SIZE;
       this.ctx.fillStyle = bullet.color || '#ffff00';
       this.ctx.shadowBlur = 10;
@@ -1383,12 +1452,12 @@ class Renderer {
     });
   }
 
-  drawZombieSprite(zombie) {
+  drawZombieSprite(zombie, timestamp) {
     this.ctx.save();
     this.ctx.translate(zombie.x, zombie.y);
 
     // Animation de marche (oscillation des bras et jambes)
-    const walkCycle = Math.sin(Date.now() / 200 + zombie.id) * 0.2;
+    const walkCycle = Math.sin(timestamp / 200 + zombie.id * 100) * 0.2;
     const scale = zombie.isBoss ? 1.5 : 1;
     const baseSize = zombie.size / 25; // Normaliser par rapport à la taille par défaut (25)
 
@@ -1614,10 +1683,15 @@ class Renderer {
     this.ctx.restore();
   }
 
-  renderZombies(zombies) {
+  renderZombies(zombies, timestamp = performance.now()) {
     Object.values(zombies).forEach(zombie => {
+      // Viewport culling - ne rendre que les zombies visibles
+      if (!this.camera.isInViewport(zombie.x, zombie.y, zombie.size * 2)) {
+        return;
+      }
+
       // Dessiner le sprite du zombie
-      this.drawZombieSprite(zombie);
+      this.drawZombieSprite(zombie, timestamp);
 
       // Health bar
       if (zombie.maxHealth) {
@@ -1950,28 +2024,165 @@ class Renderer {
     this.ctx.restore();
   }
 
-  renderPlayers(players, currentPlayerId, config) {
+  drawPlayerSprite(player, isCurrentPlayer, timestamp) {
+    this.ctx.save();
+    this.ctx.translate(player.x, player.y);
+
+    // Calculer la vélocité pour l'animation de marche
+    const velocity = Math.sqrt((player.vx || 0) ** 2 + (player.vy || 0) ** 2);
+    const isMoving = velocity > 0.5;
+
+    // Animation de marche basée sur le mouvement
+    const walkCycle = isMoving ? Math.sin(timestamp / 150) * 0.3 : 0;
+    const baseSize = 20 / 20; // Normaliser par rapport à PLAYER_SIZE (20)
+
+    // Couleurs du joueur
+    const primaryColor = isCurrentPlayer ? '#0088ff' : '#ff8800';
+    const secondaryColor = isCurrentPlayer ? '#0066cc' : '#cc6600';
+    const borderColor = isCurrentPlayer ? '#00ffff' : '#ffaa00';
+
+    this.ctx.fillStyle = primaryColor;
+    this.ctx.strokeStyle = '#000';
+    this.ctx.lineWidth = 1.5;
+
+    // Jambes (arrière-plan)
+    const legWidth = 5 * baseSize;
+    const legHeight = 10 * baseSize;
+    const legSpacing = 7 * baseSize;
+
+    // Jambe gauche
+    this.ctx.save();
+    this.ctx.translate(-legSpacing / 2, 8 * baseSize);
+    this.ctx.rotate(walkCycle);
+    this.ctx.fillStyle = secondaryColor;
+    this.ctx.fillRect(-legWidth / 2, 0, legWidth, legHeight);
+    this.ctx.strokeRect(-legWidth / 2, 0, legWidth, legHeight);
+    // Pied
+    this.ctx.fillStyle = '#222';
+    this.ctx.fillRect(-legWidth / 2, legHeight - 2, legWidth, 2);
+    this.ctx.restore();
+
+    // Jambe droite
+    this.ctx.save();
+    this.ctx.translate(legSpacing / 2, 8 * baseSize);
+    this.ctx.rotate(-walkCycle);
+    this.ctx.fillStyle = secondaryColor;
+    this.ctx.fillRect(-legWidth / 2, 0, legWidth, legHeight);
+    this.ctx.strokeRect(-legWidth / 2, 0, legWidth, legHeight);
+    // Pied
+    this.ctx.fillStyle = '#222';
+    this.ctx.fillRect(-legWidth / 2, legHeight - 2, legWidth, 2);
+    this.ctx.restore();
+
+    // Corps principal (torse)
+    const bodyWidth = 16 * baseSize;
+    const bodyHeight = 18 * baseSize;
+    this.ctx.fillStyle = primaryColor;
+    this.ctx.fillRect(-bodyWidth / 2, -4 * baseSize, bodyWidth, bodyHeight);
+    this.ctx.strokeRect(-bodyWidth / 2, -4 * baseSize, bodyWidth, bodyHeight);
+
+    // Détail du torse (rayure centrale)
+    this.ctx.strokeStyle = borderColor;
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.moveTo(0, -4 * baseSize);
+    this.ctx.lineTo(0, -4 * baseSize + bodyHeight);
+    this.ctx.stroke();
+
+    // Bras
+    const armWidth = 4 * baseSize;
+    const armHeight = 12 * baseSize;
+    const armOffset = bodyWidth / 2 + 1 * baseSize;
+
+    this.ctx.fillStyle = primaryColor;
+    this.ctx.strokeStyle = '#000';
+    this.ctx.lineWidth = 1.5;
+
+    // Bras gauche
+    this.ctx.save();
+    this.ctx.translate(-armOffset, 0);
+    this.ctx.rotate(isMoving ? -walkCycle * 1.2 : -0.2);
+    this.ctx.fillRect(-armWidth / 2, 0, armWidth, armHeight);
+    this.ctx.strokeRect(-armWidth / 2, 0, armWidth, armHeight);
+    // Main
+    this.ctx.fillStyle = '#ffcc99';
+    this.ctx.beginPath();
+    this.ctx.arc(0, armHeight, armWidth / 2, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.stroke();
+    this.ctx.restore();
+
+    // Bras droit
+    this.ctx.save();
+    this.ctx.translate(armOffset, 0);
+    this.ctx.rotate(isMoving ? walkCycle * 1.2 : 0.2);
+    this.ctx.fillRect(-armWidth / 2, 0, armWidth, armHeight);
+    this.ctx.strokeRect(-armWidth / 2, 0, armWidth, armHeight);
+    // Main
+    this.ctx.fillStyle = '#ffcc99';
+    this.ctx.beginPath();
+    this.ctx.arc(0, armHeight, armWidth / 2, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.stroke();
+    this.ctx.restore();
+
+    // Tête
+    const headRadius = 8 * baseSize;
+    this.ctx.fillStyle = '#ffcc99';
+    this.ctx.strokeStyle = '#000';
+    this.ctx.lineWidth = 1.5;
+    this.ctx.beginPath();
+    this.ctx.arc(0, -8 * baseSize, headRadius, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    // Yeux
+    const eyeSize = 2;
+    const eyeOffset = 3 * baseSize;
+    this.ctx.fillStyle = '#fff';
+    this.ctx.beginPath();
+    this.ctx.arc(-eyeOffset, -9 * baseSize, eyeSize, 0, Math.PI * 2);
+    this.ctx.arc(eyeOffset, -9 * baseSize, eyeSize, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Pupilles
+    this.ctx.fillStyle = '#000';
+    this.ctx.beginPath();
+    this.ctx.arc(-eyeOffset, -9 * baseSize, eyeSize / 2, 0, Math.PI * 2);
+    this.ctx.arc(eyeOffset, -9 * baseSize, eyeSize / 2, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Bouche (sourire)
+    this.ctx.strokeStyle = '#000';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.arc(0, -6 * baseSize, 3 * baseSize, 0.2, Math.PI - 0.2);
+    this.ctx.stroke();
+
+    // Cheveux/Casque selon le joueur
+    this.ctx.fillStyle = borderColor;
+    this.ctx.beginPath();
+    this.ctx.arc(0, -12 * baseSize, headRadius * 0.8, Math.PI, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.restore();
+  }
+
+  renderPlayers(players, currentPlayerId, config, dateNow = Date.now(), timestamp = performance.now()) {
     Object.entries(players).forEach(([pid, p]) => {
       const isCurrentPlayer = pid === currentPlayerId;
       if (!p.alive) return;
 
       // Speed effect
-      if (p.speedBoost && Date.now() < p.speedBoost) {
+      if (p.speedBoost && dateNow < p.speedBoost) {
         this.ctx.shadowBlur = 20;
         this.ctx.shadowColor = '#00ffff';
       }
 
-      // Body
-      this.ctx.fillStyle = isCurrentPlayer ? '#0088ff' : '#ff8800';
-      this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, config.PLAYER_SIZE, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.shadowBlur = 0;
+      // Draw enhanced player sprite
+      this.drawPlayerSprite(p, isCurrentPlayer, timestamp);
 
-      // Border
-      this.ctx.strokeStyle = isCurrentPlayer ? '#00ffff' : '#ffaa00';
-      this.ctx.lineWidth = 3;
-      this.ctx.stroke();
+      this.ctx.shadowBlur = 0;
 
       // Render weapon sprite
       const weaponType = p.weapon || 'pistol';
