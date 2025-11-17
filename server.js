@@ -18,6 +18,7 @@ const gameState = {
   particles: {},
   poisonTrails: {},
   loot: {},
+  explosions: {},
   walls: [],
   rooms: [],
   currentRoom: 0,
@@ -28,6 +29,7 @@ const gameState = {
   nextParticleId: 0,
   nextPoisonTrailId: 0,
   nextLootId: 0,
+  nextExplosionId: 0,
   wave: 1,
   zombiesKilledThisWave: 0,
   zombiesSpawnedThisWave: 0,
@@ -98,7 +100,10 @@ const WEAPONS = {
     bulletCount: 1,
     spread: 0,
     color: '#ff0000',
-    bulletSize: 8 // Roquettes plus grosses
+    bulletSize: 8, // Roquettes plus grosses
+    hasExplosion: true, // Les roquettes explosent toujours
+    explosionRadius: 120, // Grand rayon d'explosion
+    explosionDamage: 80 // Dégâts de zone
   }
 };
 
@@ -887,6 +892,22 @@ function createParticles(x, y, color, count = 10) {
   }
 }
 
+// Créer une explosion visuelle
+function createExplosion(x, y, radius, isRocket = false) {
+  const explosionId = gameState.nextExplosionId++;
+  const now = Date.now();
+
+  gameState.explosions[explosionId] = {
+    id: explosionId,
+    x: x,
+    y: y,
+    radius: radius,
+    isRocket: isRocket,
+    createdAt: now,
+    duration: 400 // L'animation dure 400ms
+  };
+}
+
 // Mise à jour de la logique du jeu
 function gameLoop() {
   const now = Date.now();
@@ -1306,8 +1327,19 @@ function gameLoop() {
 
         // Balles explosives
         if (bullet.explosiveRounds && bullet.explosionRadius > 0) {
-          // Créer explosion
-          createParticles(zombie.x, zombie.y, '#ff8800', 20);
+          // Créer l'effet visuel d'explosion
+          createExplosion(zombie.x, zombie.y, bullet.explosionRadius, bullet.isRocket);
+
+          // Créer explosion - plus intense pour les roquettes
+          const explosionColor = bullet.isRocket ? '#ff0000' : '#ff8800';
+          const particleCount = bullet.isRocket ? 40 : 20;
+          createParticles(zombie.x, zombie.y, explosionColor, particleCount);
+
+          // Pour les roquettes, créer aussi des particules orange et jaunes
+          if (bullet.isRocket) {
+            createParticles(zombie.x, zombie.y, '#ff8800', 30);
+            createParticles(zombie.x, zombie.y, '#ffff00', 20);
+          }
 
           // Infliger dégâts dans le rayon
           for (let otherId in gameState.zombies) {
@@ -1315,7 +1347,11 @@ function gameLoop() {
               const other = gameState.zombies[otherId];
               const dist = distance(zombie.x, zombie.y, other.x, other.y);
               if (dist < bullet.explosionRadius) {
-                other.health -= bullet.damage * bullet.explosionDamagePercent;
+                // Les roquettes utilisent des dégâts fixes, les autres armes un pourcentage
+                const explosionDmg = bullet.isRocket ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
+                other.health -= explosionDmg;
+                // Créer des particules sur les zombies touchés
+                createParticles(other.x, other.y, other.color, 8);
               }
             }
           }
@@ -1416,6 +1452,14 @@ function gameLoop() {
 
     if (now > particle.lifetime) {
       delete gameState.particles[particleId];
+    }
+  }
+
+  // Mise à jour des explosions
+  for (let explosionId in gameState.explosions) {
+    const explosion = gameState.explosions[explosionId];
+    if (now > explosion.createdAt + explosion.duration) {
+      delete gameState.explosions[explosionId];
     }
   }
 
@@ -1581,6 +1625,8 @@ setInterval(() => {
     bullets: gameState.bullets,
     powerups: gameState.powerups,
     particles: gameState.particles,
+    poisonTrails: gameState.poisonTrails,
+    explosions: gameState.explosions,
     loot: gameState.loot,
     walls: gameState.walls,
     wave: gameState.wave, // MODE INFINI - afficher la vague actuelle
@@ -1717,9 +1763,11 @@ io.on('connection', (socket) => {
         size: weapon.bulletSize || CONFIG.BULLET_SIZE,
         piercing: player.bulletPiercing || 0,
         piercedZombies: [],
-        explosiveRounds: player.explosiveRounds || false,
-        explosionRadius: player.explosionRadius || 0,
-        explosionDamagePercent: player.explosionDamagePercent || 0
+        explosiveRounds: player.explosiveRounds || weapon.hasExplosion || false,
+        explosionRadius: weapon.hasExplosion ? weapon.explosionRadius : (player.explosionRadius || 0),
+        explosionDamagePercent: weapon.hasExplosion ? 1 : (player.explosionDamagePercent || 0), // 100% pour les roquettes
+        rocketExplosionDamage: weapon.hasExplosion ? weapon.explosionDamage : 0,
+        isRocket: weapon.hasExplosion || false
       };
     }
   });

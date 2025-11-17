@@ -1097,6 +1097,7 @@ class Renderer {
     this.renderLoot(gameState.state.loot, gameState.config);
     this.renderParticles(gameState.state.particles);
     this.renderPoisonTrails(gameState.state.poisonTrails);
+    this.renderExplosions(gameState.state.explosions);
     this.renderBullets(gameState.state.bullets, gameState.config);
     this.renderZombies(gameState.state.zombies);
     this.renderPlayers(gameState.state.players, playerId, gameState.config);
@@ -1264,6 +1265,95 @@ class Renderer {
       this.ctx.beginPath();
       this.ctx.arc(trail.x, trail.y, trail.radius, 0, Math.PI * 2);
       this.ctx.stroke();
+
+      this.ctx.globalAlpha = 1;
+    });
+  }
+
+  renderExplosions(explosions) {
+    const now = Date.now();
+    Object.values(explosions || {}).forEach(explosion => {
+      const age = now - explosion.createdAt;
+      const progress = age / explosion.duration;
+
+      // Ne pas afficher si l'explosion est terminée
+      if (progress >= 1) return;
+
+      // Animation d'expansion
+      const currentRadius = explosion.radius * (0.3 + progress * 0.7);
+
+      // Fade out
+      const alpha = 1 - progress;
+
+      if (explosion.isRocket) {
+        // Explosion de roquette - effet plus intense
+
+        // Cercle extérieur rouge vif
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.globalAlpha = alpha * 0.5;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Cercle moyen orange
+        this.ctx.fillStyle = '#ff8800';
+        this.ctx.globalAlpha = alpha * 0.7;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.7, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Cercle intérieur jaune brillant
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.globalAlpha = alpha * 0.9;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.4, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Centre blanc très brillant
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.globalAlpha = alpha;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Contour rouge pulsant
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 3;
+        this.ctx.globalAlpha = alpha * 0.8;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius, 0, Math.PI * 2);
+        this.ctx.stroke();
+
+        // Rayons de l'explosion (8 rayons)
+        this.ctx.strokeStyle = '#ffff00';
+        this.ctx.lineWidth = 2;
+        this.ctx.globalAlpha = alpha * 0.6;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const rayLength = currentRadius * 1.2;
+          this.ctx.beginPath();
+          this.ctx.moveTo(explosion.x, explosion.y);
+          this.ctx.lineTo(
+            explosion.x + Math.cos(angle) * rayLength,
+            explosion.y + Math.sin(angle) * rayLength
+          );
+          this.ctx.stroke();
+        }
+
+      } else {
+        // Explosion normale
+        this.ctx.fillStyle = '#ff8800';
+        this.ctx.globalAlpha = alpha * 0.6;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.globalAlpha = alpha * 0.8;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, currentRadius * 0.5, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
 
       this.ctx.globalAlpha = 1;
     });
