@@ -114,7 +114,7 @@ const rateLimits = new Map();
 
 const RATE_LIMIT_CONFIG = {
   'shoot': { maxRequests: 50, windowMs: 1000 },
-  'playerMove': { maxRequests: 250, windowMs: 1000 }, // Increased for 200 FPS server
+  'playerMove': { maxRequests: 100, windowMs: 1000 }, // Balanced for 60 FPS server with 30 FPS client updates
   'setNickname': { maxRequests: 3, windowMs: 10000 },
   'selectUpgrade': { maxRequests: 10, windowMs: 5000 },
   'buyItem': { maxRequests: 20, windowMs: 5000 },
@@ -1502,14 +1502,14 @@ initializeRooms();
 
 // Delta compression géré par NetworkManager (voir lib/server/NetworkManager.js)
 
-// Game loop à 30 FPS avec Delta Compression (OPTIMISÉ avec NetworkManager)
-// ULTRA-SMOOTH: 200 FPS server tick rate for maximum responsiveness
+// Game loop à 60 FPS avec Delta Compression (OPTIMISÉ avec NetworkManager)
+// BALANCED: 60 FPS server tick rate for smooth gameplay without excessive overhead
 let gameLoopTimer = setInterval(() => {
   gameLoop();
 
   // Émettre l'état du jeu (delta compression automatique)
   networkManager.emitGameState();
-}, 1000 / 200);
+}, 1000 / 60);
 
 // Vérification périodique de l'inactivité des joueurs
 let heartbeatTimer = setInterval(() => {
@@ -1847,10 +1847,11 @@ io.on('connection', (socket) => {
     const hasSpeedBoost = player.speedBoost && Date.now() < player.speedBoost;
     const boostMultiplier = hasSpeedBoost ? 2 : 1;
 
-    // Distance max par frame (à 30 FPS avec tolérance pour latence)
-    // CORRECTION: Ajouter une limite absolue pour éviter l'exploitation
-    const ABSOLUTE_MAX_DISTANCE = 50; // pixels par frame (limite absolue)
-    const calculatedMax = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 1.5;
+    // Distance max par update (client sends at 30 FPS, server at 60 FPS)
+    // Account for 2 server ticks between client updates (33ms = 2 * 16.67ms)
+    // Add tolerance for network latency and frame timing variations
+    const ABSOLUTE_MAX_DISTANCE = 80; // pixels per client update (increased for 30 FPS client)
+    const calculatedMax = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 2.5; // Increased tolerance
     const MAX_DISTANCE_PER_FRAME = Math.min(calculatedMax, ABSOLUTE_MAX_DISTANCE);
 
     // Rejeter le mouvement si distance trop importante (tentative de téléportation)
