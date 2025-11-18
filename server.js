@@ -994,7 +994,7 @@ function gameLoop() {
 
           // Notifier tous les joueurs de la nouvelle vague
           // CORRECTION: Plafonner le calcul pour éviter surcharge à hautes vagues
-          const effectiveWave = Math.min(gameState.wave, 100);
+          const effectiveWave = Math.min(gameState.wave, 130);
           io.emit('newWave', {
             wave: gameState.wave,
             zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (effectiveWave - 1) * 7
