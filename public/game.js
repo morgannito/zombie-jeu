@@ -1274,6 +1274,7 @@ class NetworkManager {
   setupSocketListeners() {
     this.socket.on('init', (data) => this.handleInit(data));
     this.socket.on('gameState', (state) => this.handleGameState(state));
+    this.socket.on('gameStateDelta', (delta) => this.handleGameStateDelta(delta));
     this.socket.on('bossSpawned', (data) => this.handleBossSpawned(data));
     this.socket.on('newWave', (data) => this.handleNewWave(data));
     this.socket.on('levelUp', (data) => this.handleLevelUp(data));
@@ -1305,6 +1306,57 @@ class NetworkManager {
       }
     } else {
       window.gameState.updateState(state);
+    }
+
+    if (window.gameUI) {
+      window.gameUI.update();
+    }
+  }
+
+  handleGameStateDelta(delta) {
+    // Save local player prediction
+    let localPlayerState = null;
+    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const localPlayer = window.gameState.state.players[window.gameState.playerId];
+      localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
+    }
+
+    // Apply delta updates
+    if (delta.updated) {
+      Object.entries(delta.updated).forEach(([type, entities]) => {
+        if (!window.gameState.state[type]) {
+          window.gameState.state[type] = {};
+        }
+        Object.entries(entities).forEach(([id, entity]) => {
+          window.gameState.state[type][id] = entity;
+        });
+      });
+    }
+
+    // Remove deleted entities
+    if (delta.removed) {
+      Object.entries(delta.removed).forEach(([type, ids]) => {
+        if (window.gameState.state[type]) {
+          ids.forEach(id => {
+            delete window.gameState.state[type][id];
+          });
+        }
+      });
+    }
+
+    // Update metadata
+    if (delta.meta) {
+      if (delta.meta.wave !== undefined) window.gameState.state.wave = delta.meta.wave;
+      if (delta.meta.walls !== undefined) window.gameState.state.walls = delta.meta.walls;
+      if (delta.meta.currentRoom !== undefined) window.gameState.state.currentRoom = delta.meta.currentRoom;
+      if (delta.meta.bossSpawned !== undefined) window.gameState.state.bossSpawned = delta.meta.bossSpawned;
+    }
+
+    // Restore local player prediction
+    if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
+      window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
+      window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
     }
 
     if (window.gameUI) {
