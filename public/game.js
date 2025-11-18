@@ -1338,6 +1338,7 @@ class NetworkManager {
     this.socket.on('shopUpdate', (data) => this.handleShopUpdate(data));
     this.socket.on('comboUpdate', (data) => this.handleComboUpdate(data));
     this.socket.on('comboReset', () => this.handleComboReset());
+    this.socket.on('sessionTimeout', (data) => this.handleSessionTimeout(data));
   }
 
   handleInit(data) {
@@ -1550,6 +1551,22 @@ class NetworkManager {
     if (window.comboSystem) {
       window.comboSystem.resetCombo();
     }
+  }
+
+  handleSessionTimeout(data) {
+    console.log('[Socket.IO] Session timeout:', data.reason);
+
+    // Show error message to user
+    if (window.toastManager) {
+      window.toastManager.show('⏱️ Session expirée: ' + (data.reason || 'Inactivité détectée'), 'error');
+    }
+
+    // Show alert with option to reload
+    setTimeout(() => {
+      if (confirm('Votre session a expiré. Voulez-vous recharger la page ?')) {
+        window.location.reload();
+      }
+    }, 500);
   }
 
   // Send events to server
