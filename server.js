@@ -870,6 +870,14 @@ function gameLoop() {
 
     // Nettoyer les traînées expirées (après 3 secondes)
     if (now - trail.createdAt >= trail.duration) {
+      // CORRECTION: Nettoyer le tracking de dégâts pour cette trail dans tous les joueurs
+      for (let playerId in gameState.players) {
+        const p = gameState.players[playerId];
+        if (p.lastPoisonDamageByTrail && p.lastPoisonDamageByTrail[trailId]) {
+          delete p.lastPoisonDamageByTrail[trailId];
+        }
+      }
+
       entityManager.destroyPoisonTrail(trailId);
       continue;
     }
@@ -888,10 +896,14 @@ function gameLoop() {
 
       const dist = distance(player.x, player.y, trail.x, trail.y);
       if (dist < trail.radius) {
-        // Appliquer les dégâts de poison toutes les 500ms
-        if (!player.lastPoisonDamage || now - player.lastPoisonDamage >= 500) {
+        // CORRECTION: Tracking de dégâts par trail pour permettre le stacking
+        if (!player.lastPoisonDamageByTrail) player.lastPoisonDamageByTrail = {};
+        const lastTrailDamage = player.lastPoisonDamageByTrail[trailId] || 0;
+
+        // Appliquer les dégâts de poison toutes les 500ms PAR TRAIL
+        if (now - lastTrailDamage >= 500) {
           player.health -= trail.damage;
-          player.lastPoisonDamage = now;
+          player.lastPoisonDamageByTrail[trailId] = now;
 
           // Créer des particules pour l'effet visuel
           createParticles(player.x, player.y, '#22ff22', 2);
@@ -1134,6 +1146,14 @@ function gameLoop() {
 
         createLoot(zombie.x, zombie.y, goldBonus, xpBonus);
 
+        // CORRECTION: Nettoyer le tracking de dégâts pour ce zombie dans tous les joueurs
+        for (let playerId in gameState.players) {
+          const p = gameState.players[playerId];
+          if (p.lastDamageTime && p.lastDamageTime[zombieId]) {
+            delete p.lastDamageTime[zombieId];
+          }
+        }
+
         // Supprimer le zombie
         delete gameState.zombies[zombieId];
 
@@ -1375,6 +1395,9 @@ let heartbeatTimer = setInterval(() => {
 
       // Nettoyer les balles orphelines appartenant à ce joueur
       cleanupPlayerBullets(playerId);
+
+      // CORRECTION: Nettoyer les rate limits
+      cleanupRateLimits(playerId);
 
       // Supprimer le joueur
       delete gameState.players[playerId];
@@ -1631,6 +1654,10 @@ io.on('connection', (socket) => {
       // Réinitialiser le run (Permadeath mais garde les upgrades permanents)
       player.nickname = null; // Réinitialiser le pseudo
       player.hasNickname = false;
+
+      // CORRECTION: Nettoyer les balles de la vie précédente
+      cleanupPlayerBullets(socket.id);
+
       player.spawnProtection = false;
       player.spawnProtectionEndTime = 0;
       player.invisible = false;

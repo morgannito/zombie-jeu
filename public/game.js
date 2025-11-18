@@ -200,16 +200,13 @@ class AudioManager {
     if (!this.enabled || !this.audioContext) return;
 
     // Resume audio context if needed (for mobile auto-play restrictions)
+    // CORRECTION: Ne pas bloquer après resume() car c'est async
+    // Le contexte va se résumer automatiquement et les sons suivants fonctionneront
     if (this.audioContext.state === 'suspended') {
       this.audioContext.resume().catch(e => {
         console.warn('Failed to resume audio context:', e);
-        return;
       });
-    }
-
-    // CORRECTION: Vérifier que le context est bien en état 'running'
-    if (this.audioContext.state !== 'running') {
-      return; // Ne pas essayer de jouer si le contexte n'est pas prêt
+      // Continue quand même - le premier son peut ne pas jouer, mais ça débloque le contexte
     }
 
     const now = this.audioContext.currentTime;
