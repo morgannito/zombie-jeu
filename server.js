@@ -1492,9 +1492,8 @@ io.on('connection', (socket) => {
     // Nombre total de balles (arme + extra bullets)
     const totalBullets = weapon.bulletCount + (player.extraBullets || 0);
 
-    // Créer les balles selon l'arme
+    // Créer les balles selon l'arme (OPTIMISÉ avec Object Pool)
     for (let i = 0; i < totalBullets; i++) {
-      const bulletId = gameState.nextBulletId++;
       const spreadAngle = data.angle + (Math.random() - 0.5) * weapon.spread;
 
       // Appliquer le multiplicateur de dégâts
@@ -1511,8 +1510,8 @@ io.on('connection', (socket) => {
       // Piercing (de base + piercing de l'arme)
       const totalPiercing = (player.bulletPiercing || 0) + (weapon.piercing || 0);
 
-      gameState.bullets[bulletId] = {
-        id: bulletId,
+      // CORRECTION: Utilisation du pool d'objets au lieu de création manuelle
+      entityManager.createBullet({
         x: player.x,
         y: player.y,
         vx: Math.cos(spreadAngle) * weapon.bulletSpeed,
@@ -1522,13 +1521,11 @@ io.on('connection', (socket) => {
         color: isCritical ? '#ff0000' : weapon.color,
         size: weapon.bulletSize || CONFIG.BULLET_SIZE,
         piercing: totalPiercing,
-        piercedZombies: [],
         explosiveRounds: player.explosiveRounds || weapon.hasExplosion || false,
         explosionRadius: weapon.hasExplosion ? weapon.explosionRadius : (player.explosionRadius || 0),
         explosionDamagePercent: weapon.hasExplosion ? 1 : (player.explosionDamagePercent || 0),
         rocketExplosionDamage: weapon.hasExplosion ? weapon.explosionDamage : 0,
         isRocket: weapon.hasExplosion && !weapon.isGrenade || false,
-        // Propriétés spéciales des nouvelles armes
         isFlame: weapon.isFlame || false,
         isLaser: weapon.isLaser || false,
         isGrenade: weapon.isGrenade || false,
@@ -1536,7 +1533,7 @@ io.on('connection', (socket) => {
         gravity: weapon.gravity || 0,
         lifetime: weapon.lifetime ? now + weapon.lifetime : null,
         createdAt: now
-      };
+      });
     }
   });
 
