@@ -101,6 +101,7 @@ class ScreenShake {
     this.shakeIntensity = 0;
     this.originalTransform = '';
     this.shakeStartTime = 0;
+    this.shakeElapsed = 0;
   }
 
   /**
@@ -113,23 +114,23 @@ class ScreenShake {
 
     this.shakeIntensity = intensity;
     this.shakeDuration = duration;
-    this.shakeStartTime = Date.now();
+    this.shakeElapsed = 0;
 
     if (!this.isShaking) {
       this.isShaking = true;
       this.originalTransform = this.canvas.style.transform || '';
-      this.animate();
     }
   }
 
   /**
-   * Animation de la secousse
+   * Met à jour l'animation de la secousse (appelé depuis la boucle principale)
+   * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
    */
-  animate() {
+  update(deltaTime = 16) {
     if (!this.isShaking) return;
 
-    const elapsed = Date.now() - this.shakeStartTime;
-    const progress = elapsed / this.shakeDuration;
+    this.shakeElapsed += deltaTime;
+    const progress = this.shakeElapsed / this.shakeDuration;
 
     if (progress >= 1) {
       // Fin de la secousse
@@ -146,9 +147,6 @@ class ScreenShake {
     const offsetY = (Math.random() - 0.5) * currentIntensity * 2;
 
     this.canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) ${this.originalTransform}`;
-
-    // Continue l'animation
-    requestAnimationFrame(() => this.animate());
   }
 
   /**
@@ -414,9 +412,11 @@ class ScreenEffectsManager {
 
   /**
    * Met à jour tous les effets
+   * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
    */
-  update() {
+  update(deltaTime = 16) {
     this.trails.update();
+    this.shake.update(deltaTime);
   }
 
   /**
