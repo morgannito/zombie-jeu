@@ -1207,6 +1207,116 @@ let heartbeatTimer = setInterval(() => {
 }, HEARTBEAT_CHECK_INTERVAL);
 
 // ===============================================
+// INPUT VALIDATION UTILITIES
+// ===============================================
+
+/**
+ * Valide que la valeur est un nombre fini et valide
+ * @param {*} value - Valeur à valider
+ * @param {number} min - Valeur minimale (optionnel)
+ * @param {number} max - Valeur maximale (optionnel)
+ * @returns {boolean}
+ */
+function isValidNumber(value, min = -Infinity, max = Infinity) {
+  return typeof value === 'number' && isFinite(value) && value >= min && value <= max;
+}
+
+/**
+ * Valide que la valeur est une chaîne non vide et sécurisée
+ * @param {*} value - Valeur à valider
+ * @param {number} maxLength - Longueur maximale
+ * @returns {boolean}
+ */
+function isValidString(value, maxLength = 1000) {
+  return typeof value === 'string' && value.length > 0 && value.length <= maxLength;
+}
+
+/**
+ * Valide et sanitize un objet de données de mouvement
+ * @param {*} data - Données du mouvement
+ * @returns {Object|null} Données validées ou null si invalides
+ */
+function validateMovementData(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  // Valider x, y, angle comme nombres valides
+  if (!isValidNumber(data.x, 0, CONFIG.ROOM_WIDTH) ||
+      !isValidNumber(data.y, 0, CONFIG.ROOM_HEIGHT) ||
+      !isValidNumber(data.angle, -Math.PI * 2, Math.PI * 2)) {
+    return null;
+  }
+
+  return {
+    x: data.x,
+    y: data.y,
+    angle: data.angle
+  };
+}
+
+/**
+ * Valide les données d'un tir
+ * @param {*} data - Données du tir
+ * @returns {Object|null}
+ */
+function validateShootData(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  if (!isValidNumber(data.angle, -Math.PI * 2, Math.PI * 2)) {
+    return null;
+  }
+
+  return { angle: data.angle };
+}
+
+/**
+ * Valide les données de sélection d'upgrade
+ * @param {*} data - Données de l'upgrade
+ * @returns {Object|null}
+ */
+function validateUpgradeData(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  if (!isValidString(data.upgradeId, 100)) {
+    return null;
+  }
+
+  // Vérifier que l'upgrade existe dans la configuration
+  if (!LEVEL_UP_UPGRADES[data.upgradeId]) {
+    return null;
+  }
+
+  return { upgradeId: data.upgradeId };
+}
+
+/**
+ * Valide les données d'achat d'item
+ * @param {*} data - Données de l'achat
+ * @returns {Object|null}
+ */
+function validateBuyItemData(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  if (!isValidString(data.itemId, 100) || !isValidString(data.category, 50)) {
+    return null;
+  }
+
+  // Vérifier que la catégorie est valide
+  if (data.category !== 'permanent' && data.category !== 'temporary') {
+    return null;
+  }
+
+  // Vérifier que l'item existe dans la configuration
+  if (!SHOP_ITEMS[data.category] || !SHOP_ITEMS[data.category][data.itemId]) {
+    return null;
+  }
+
+  return {
+    itemId: data.itemId,
+    category: data.category
+  };
+}
+
+// ===============================================
 // SAFE SOCKET HANDLER WRAPPER - Gestion d'erreurs
 // ===============================================
 
@@ -1231,12 +1341,71 @@ function safeHandler(handlerName, handler) {
   };
 }
 
+// ===============================================
+// SESSION RECOVERY SYSTEM - Reconnection state management
+// ===============================================
+
+/**
+ * Map to store disconnected player states for recovery
+ * Key: sessionId, Value: { playerState, disconnectedAt, previousSocketId }
+ * States are kept for 5 minutes after disconnection
+ */
+const disconnectedPlayers = new Map();
+const SESSION_RECOVERY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Periodically clean up expired session recovery states
+ */
+setInterval(() => {
+  const now = Date.now();
+  let cleanedCount = 0;
+
+  for (const [sessionId, data] of disconnectedPlayers.entries()) {
+    if (now - data.disconnectedAt > SESSION_RECOVERY_TIMEOUT) {
+      disconnectedPlayers.delete(sessionId);
+      cleanedCount++;
+    }
+  }
+
+  if (cleanedCount > 0) {
+    console.log(`[SESSION RECOVERY] Cleaned ${cleanedCount} expired session(s)`);
+  }
+}, 60000); // Check every minute
+
 // Gestion des connexions Socket.IO
 io.on('connection', (socket) => {
-  console.log('Un joueur s\'est connecté:', socket.id);
+  const sessionId = socket.handshake.auth?.sessionId;
 
-  // Créer un nouveau joueur (Rogue-like)
-  gameState.players[socket.id] = {
+  console.log('Un joueur s\'est connecté:', socket.id, sessionId ? `(Session: ${sessionId})` : '(No session)');
+
+  // RECOVERY: Check if this session has a saved state
+  let playerRecovered = false;
+  if (sessionId && disconnectedPlayers.has(sessionId)) {
+    const savedData = disconnectedPlayers.get(sessionId);
+    const timeSinceDisconnect = Date.now() - savedData.disconnectedAt;
+
+    console.log(`[SESSION RECOVERY] Found saved state for session ${sessionId} (disconnected ${Math.round(timeSinceDisconnect / 1000)}s ago)`);
+
+    // Restore player state with new socket ID
+    const restoredPlayer = {
+      ...savedData.playerState,
+      id: socket.id, // Update to new socket ID
+      lastActivityTime: Date.now() // Reset activity timer
+    };
+
+    gameState.players[socket.id] = restoredPlayer;
+    disconnectedPlayers.delete(sessionId);
+    playerRecovered = true;
+
+    console.log(`[SESSION RECOVERY] Restored player ${restoredPlayer.nickname || 'Unknown'} (Level ${restoredPlayer.level}, ${restoredPlayer.health}/${restoredPlayer.maxHealth} HP, ${restoredPlayer.gold} gold)`);
+  }
+
+  // Create new player if no recovery happened
+  if (!playerRecovered) {
+    console.log(`[SESSION] Creating new player for ${socket.id}`);
+
+    // Créer un nouveau joueur (Rogue-like)
+    gameState.players[socket.id] = {
     id: socket.id,
     nickname: null, // Pseudo non défini au départ
     hasNickname: false, // Le joueur n'a pas encore choisi de pseudo
@@ -1293,6 +1462,7 @@ io.on('connection', (socket) => {
     autoTurrets: 0,
     lastAutoShot: Date.now()
   };
+  }
 
   // Envoyer la configuration au client
   socket.emit('init', {
@@ -1304,11 +1474,19 @@ io.on('connection', (socket) => {
     shopItems: SHOP_ITEMS,
     walls: gameState.walls,
     rooms: gameState.rooms.length,
-    currentRoom: gameState.currentRoom
+    currentRoom: gameState.currentRoom,
+    recovered: playerRecovered // Indicate if state was recovered
   });
 
   // Mouvement du joueur (Rogue-like avec collision)
   socket.on('playerMove', safeHandler('playerMove', function(data) {
+    // VALIDATION: Vérifier et sanitize les données d'entrée
+    const validatedData = validateMovementData(data);
+    if (!validatedData) {
+      console.warn(`[VALIDATION] Invalid movement data from ${socket.id}:`, data);
+      return;
+    }
+
     // Rate limiting
     if (!checkRateLimit(socket.id, 'playerMove')) return;
 
@@ -1317,8 +1495,8 @@ io.on('connection', (socket) => {
 
     // Clamp position to map boundaries, accounting for player size to prevent leaving map
     const halfSize = CONFIG.PLAYER_SIZE / 2;
-    const newX = Math.max(halfSize, Math.min(CONFIG.ROOM_WIDTH - halfSize, data.x));
-    const newY = Math.max(halfSize, Math.min(CONFIG.ROOM_HEIGHT - halfSize, data.y));
+    const newX = Math.max(halfSize, Math.min(CONFIG.ROOM_WIDTH - halfSize, validatedData.x));
+    const newY = Math.max(halfSize, Math.min(CONFIG.ROOM_HEIGHT - halfSize, validatedData.y));
 
     // VALIDATION: Vérifier la distance parcourue pour éviter la téléportation
     const distance = Math.sqrt(
@@ -1354,9 +1532,18 @@ io.on('connection', (socket) => {
     if (!roomManager.checkWallCollision(newX, newY, CONFIG.PLAYER_SIZE)) {
       player.x = newX;
       player.y = newY;
+    } else {
+      // Collision detected - send position correction to client to keep them in sync
+      // Only send if the client position is significantly different (> 5px)
+      const clientDistance = Math.sqrt(
+        Math.pow(newX - player.x, 2) + Math.pow(newY - player.y, 2)
+      );
+      if (clientDistance > 5) {
+        socket.emit('positionCorrection', { x: player.x, y: player.y });
+      }
     }
 
-    player.angle = data.angle;
+    player.angle = validatedData.angle;
 
     // Mettre à jour le timestamp d'activité
     player.lastActivityTime = Date.now();
@@ -1366,6 +1553,13 @@ io.on('connection', (socket) => {
 
   // Tir du joueur
   socket.on('shoot', safeHandler('shoot', function(data) {
+    // VALIDATION: Vérifier et sanitize les données d'entrée
+    const validatedData = validateShootData(data);
+    if (!validatedData) {
+      console.warn(`[VALIDATION] Invalid shoot data from ${socket.id}:`, data);
+      return;
+    }
+
     // Rate limiting
     if (!checkRateLimit(socket.id, 'shoot')) return;
 
@@ -1388,9 +1582,16 @@ io.on('connection', (socket) => {
     // Nombre total de balles (arme + extra bullets)
     const totalBullets = weapon.bulletCount + (player.extraBullets || 0);
 
+    // ANTI-CHEAT: Limiter le nombre total de balles pour éviter l'exploitation
+    const MAX_TOTAL_BULLETS = 50;
+    if (totalBullets > MAX_TOTAL_BULLETS) {
+      console.warn(`[ANTI-CHEAT] Player ${player.nickname || socket.id} has suspicious bullet count: ${totalBullets}, capping to ${MAX_TOTAL_BULLETS}`);
+    }
+    const safeBulletCount = Math.min(totalBullets, MAX_TOTAL_BULLETS);
+
     // Créer les balles selon l'arme (OPTIMISÉ avec Object Pool)
-    for (let i = 0; i < totalBullets; i++) {
-      const spreadAngle = data.angle + (Math.random() - 0.5) * weapon.spread;
+    for (let i = 0; i < safeBulletCount; i++) {
+      const spreadAngle = validatedData.angle + (Math.random() - 0.5) * weapon.spread;
 
       // Appliquer le multiplicateur de dégâts
       let damage = weapon.damage * (player.damageMultiplier || 1);
@@ -1514,6 +1715,17 @@ io.on('connection', (socket) => {
 
   // Sélectionner un upgrade au level up
   socket.on('selectUpgrade', safeHandler('selectUpgrade', function(data) {
+    // VALIDATION: Vérifier et sanitize les données d'entrée
+    const validatedData = validateUpgradeData(data);
+    if (!validatedData) {
+      console.warn(`[VALIDATION] Invalid upgrade data from ${socket.id}:`, data);
+      socket.emit('error', {
+        message: 'Upgrade invalide',
+        code: 'INVALID_UPGRADE'
+      });
+      return;
+    }
+
     // Rate limiting
     if (!checkRateLimit(socket.id, 'selectUpgrade')) return;
 
@@ -1522,10 +1734,13 @@ io.on('connection', (socket) => {
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
-    const { upgradeId } = data;
-    const upgrade = LEVEL_UP_UPGRADES[upgradeId];
+    const upgrade = LEVEL_UP_UPGRADES[validatedData.upgradeId];
 
-    if (!upgrade) return;
+    // Double vérification (déjà fait dans validateUpgradeData, mais par sécurité)
+    if (!upgrade) {
+      console.error(`[VALIDATION] Upgrade ${validatedData.upgradeId} not found after validation`);
+      return;
+    }
 
     // Appliquer l'effet de l'upgrade
     upgrade.effect(player);
@@ -1539,6 +1754,17 @@ io.on('connection', (socket) => {
 
   // Acheter un item dans le shop
   socket.on('buyItem', safeHandler('buyItem', function(data) {
+    // VALIDATION: Vérifier et sanitize les données d'entrée
+    const validatedData = validateBuyItemData(data);
+    if (!validatedData) {
+      console.warn(`[VALIDATION] Invalid buy item data from ${socket.id}:`, data);
+      socket.emit('shopUpdate', {
+        success: false,
+        message: 'Item invalide'
+      });
+      return;
+    }
+
     // Rate limiting
     if (!checkRateLimit(socket.id, 'buyItem')) return;
 
@@ -1547,11 +1773,15 @@ io.on('connection', (socket) => {
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
-    const { itemId, category } = data;
+    const { itemId, category } = validatedData;
 
     if (category === 'permanent') {
       const item = SHOP_ITEMS.permanent[itemId];
-      if (!item) return;
+      // Double vérification (déjà fait dans validateBuyItemData, mais par sécurité)
+      if (!item) {
+        console.error(`[VALIDATION] Item ${itemId} not found after validation`);
+        return;
+      }
 
       const currentLevel = player.upgrades[itemId] || 0;
 
@@ -1583,7 +1813,11 @@ io.on('connection', (socket) => {
 
     } else if (category === 'temporary') {
       const item = SHOP_ITEMS.temporary[itemId];
-      if (!item) return;
+      // Double vérification (déjà fait dans validateBuyItemData, mais par sécurité)
+      if (!item) {
+        console.error(`[VALIDATION] Temporary item ${itemId} not found after validation`);
+        return;
+      }
 
       // Vérifier si le joueur a assez d'or
       if (player.gold < item.cost) {
@@ -1704,12 +1938,35 @@ io.on('connection', (socket) => {
 
   // Déconnexion du joueur
   socket.on('disconnect', safeHandler('disconnect', function() {
-    console.log('Un joueur s\'est déconnecté:', socket.id);
+    const player = gameState.players[socket.id];
+    const sessionId = socket.handshake.auth?.sessionId;
+
+    console.log('Un joueur s\'est déconnecté:', socket.id, sessionId ? `(Session: ${sessionId})` : '(No session)');
+
+    // SESSION RECOVERY: Save player state for recovery if session exists
+    if (sessionId && player) {
+      // Only save state if player has actually started playing (has nickname)
+      if (player.hasNickname && player.alive) {
+        // Create a deep copy of player state
+        const playerStateCopy = JSON.parse(JSON.stringify(player));
+
+        disconnectedPlayers.set(sessionId, {
+          playerState: playerStateCopy,
+          disconnectedAt: Date.now(),
+          previousSocketId: socket.id
+        });
+
+        console.log(`[SESSION RECOVERY] Saved state for player ${player.nickname || 'Unknown'} (Level ${player.level}, ${player.health}/${player.maxHealth} HP, ${player.gold} gold)`);
+        console.log(`[SESSION RECOVERY] Player can reconnect within ${SESSION_RECOVERY_TIMEOUT / 1000}s to restore state`);
+      }
+    }
 
     // Nettoyer les balles orphelines appartenant à ce joueur
     cleanupPlayerBullets(socket.id);
 
+    // Remove from active players
     delete gameState.players[socket.id];
+
     // Nettoyer les rate limits
     cleanupRateLimits(socket.id);
   }));

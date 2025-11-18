@@ -6,6 +6,64 @@
  */
 
 /* ============================================
+   SESSION MANAGEMENT - Reconnection handling
+   ============================================ */
+
+class SessionManager {
+  constructor() {
+    this.sessionId = this.getOrCreateSessionId();
+  }
+
+  /**
+   * Generate a UUID v4
+   * @returns {string} UUID
+   */
+  generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  /**
+   * Get existing sessionId from localStorage or create a new one
+   * @returns {string} Session ID
+   */
+  getOrCreateSessionId() {
+    let sessionId = localStorage.getItem('zombie_session_id');
+
+    if (!sessionId) {
+      sessionId = this.generateUUID();
+      localStorage.setItem('zombie_session_id', sessionId);
+      console.log('[Session] Created new session ID:', sessionId);
+    } else {
+      console.log('[Session] Using existing session ID:', sessionId);
+    }
+
+    return sessionId;
+  }
+
+  /**
+   * Get the current session ID
+   * @returns {string}
+   */
+  getSessionId() {
+    return this.sessionId;
+  }
+
+  /**
+   * Reset session (for debugging or explicit logout)
+   */
+  resetSession() {
+    localStorage.removeItem('zombie_session_id');
+    this.sessionId = this.generateUUID();
+    localStorage.setItem('zombie_session_id', this.sessionId);
+    console.log('[Session] Reset session ID:', this.sessionId);
+  }
+}
+
+/* ============================================
    CONSTANTS & CONFIGURATION
    ============================================ */
 
@@ -69,10 +127,33 @@ class GameStateManager {
     this.powerupTypes = {};
     this.zombieTypes = {};
     this.shopItems = {};
+
+    // Visual interpolation system for smooth movement
+    this.interpolation = {
+      enabled: true,
+      factor: 0.3, // Interpolation speed (0 = instant, 1 = no interpolation)
+      previousPositions: {
+        zombies: {},
+        players: {},
+        bullets: {}
+      }
+    };
+
+    // Timestamp for state updates (to detect stale states)
+    this.lastUpdateTimestamp = Date.now();
+
+    // Debug mode (toggle with 'D' key)
+    this.debugMode = false;
+    this.debugStats = {
+      entitiesCount: {},
+      networkLatency: 0,
+      lastUpdate: 0
+    };
   }
 
   updateState(newState) {
     this.state = newState;
+    this.lastUpdateTimestamp = Date.now();
   }
 
   getPlayer() {
@@ -86,6 +167,101 @@ class GameStateManager {
     this.powerupTypes = data.powerupTypes;
     this.zombieTypes = data.zombieTypes;
     this.shopItems = data.shopItems;
+  }
+
+  /**
+   * Apply visual interpolation to entities for smooth movement
+   * Call this in the render loop, not in network handlers
+   */
+  applyInterpolation() {
+    if (!this.interpolation.enabled) return;
+
+    const factor = this.interpolation.factor;
+    const prev = this.interpolation.previousPositions;
+
+    // Interpolate zombies (not local player)
+    for (const [id, zombie] of Object.entries(this.state.zombies)) {
+      if (prev.zombies[id]) {
+        // Smooth interpolation
+        zombie.x += (prev.zombies[id].x - zombie.x) * factor;
+        zombie.y += (prev.zombies[id].y - zombie.y) * factor;
+      }
+      prev.zombies[id] = { x: zombie.x, y: zombie.y };
+    }
+
+    // Interpolate other players (not local player)
+    for (const [id, player] of Object.entries(this.state.players)) {
+      if (id !== this.playerId && prev.players[id]) {
+        player.x += (prev.players[id].x - player.x) * factor;
+        player.y += (prev.players[id].y - player.y) * factor;
+      }
+      prev.players[id] = { x: player.x, y: player.y };
+    }
+
+    // Bullets move too fast for interpolation, skip them
+  }
+
+  /**
+   * Clean up orphaned entities that no longer exist on server
+   * Entities that haven't been updated in > 3 seconds are removed
+   */
+  cleanupOrphanedEntities() {
+    const now = Date.now();
+    const ORPHAN_TIMEOUT = 3000; // 3 seconds
+
+    // Mark entities with last seen timestamp
+    ['zombies', 'bullets', 'particles', 'powerups', 'loot', 'explosions', 'poisonTrails'].forEach(type => {
+      if (!this.state[type]) return;
+
+      for (const [id, entity] of Object.entries(this.state[type])) {
+        if (!entity._lastSeen) {
+          entity._lastSeen = now;
+        }
+
+        // Remove if not updated recently
+        if (now - entity._lastSeen > ORPHAN_TIMEOUT) {
+          console.log(`[CLEANUP] Removing orphaned ${type} entity:`, id);
+          delete this.state[type][id];
+
+          // Clean interpolation cache
+          if (this.interpolation.previousPositions[type]) {
+            delete this.interpolation.previousPositions[type][id];
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Mark entity as seen (called when receiving server update)
+   */
+  markEntitySeen(type, id) {
+    if (this.state[type] && this.state[type][id]) {
+      this.state[type][id]._lastSeen = Date.now();
+    }
+  }
+
+  /**
+   * Update debug statistics
+   */
+  updateDebugStats() {
+    this.debugStats.entitiesCount = {
+      players: Object.keys(this.state.players).length,
+      zombies: Object.keys(this.state.zombies).length,
+      bullets: Object.keys(this.state.bullets).length,
+      particles: Object.keys(this.state.particles || {}).length,
+      powerups: Object.keys(this.state.powerups || {}).length,
+      loot: Object.keys(this.state.loot || {}).length
+    };
+    this.debugStats.lastUpdate = Date.now() - this.lastUpdateTimestamp;
+  }
+
+  /**
+   * Toggle debug mode
+   */
+  toggleDebug() {
+    this.debugMode = !this.debugMode;
+    console.log('[DEBUG] Debug mode:', this.debugMode ? 'ENABLED' : 'DISABLED');
   }
 }
 
@@ -1338,35 +1514,51 @@ class NetworkManager {
     this.socket.on('shopUpdate', (data) => this.handleShopUpdate(data));
     this.socket.on('comboUpdate', (data) => this.handleComboUpdate(data));
     this.socket.on('comboReset', () => this.handleComboReset());
+    this.socket.on('sessionTimeout', (data) => this.handleSessionTimeout(data));
   }
 
   handleInit(data) {
     window.gameState.initialize(data);
+
+    // Show notification if session was recovered
+    if (data.recovered && window.toastManager) {
+      window.toastManager.show('🔄 Session restaurée ! Votre progression a été récupérée.', 'success');
+      console.log('[Session] State successfully recovered');
+    }
   }
 
   handleGameState(state) {
-    // Client-side prediction for local player (but NOT after reconnection)
+    // Save local player prediction for potential restoration
+    let localPlayerState = null;
     if (!this.justReconnected && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
-      const { x, y, angle } = localPlayer;
+      localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
+    }
 
-      window.gameState.updateState(state);
+    // Update state with server data
+    window.gameState.updateState(state);
 
-      // Restore predicted position
-      if (window.gameState.state.players[window.gameState.playerId]) {
-        window.gameState.state.players[window.gameState.playerId].x = x;
-        window.gameState.state.players[window.gameState.playerId].y = y;
-        window.gameState.state.players[window.gameState.playerId].angle = angle;
+    // Restore predicted position with reconciliation
+    if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const serverPlayer = window.gameState.state.players[window.gameState.playerId];
+      const dx = localPlayerState.x - serverPlayer.x;
+      const dy = localPlayerState.y - serverPlayer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // If distance is too large, trust server (possible desync or correction)
+      if (distance < 50) {
+        window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
+        window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
+        window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
+      } else {
+        console.log('[Socket.IO] Large position difference in full state, accepting server position:', distance.toFixed(1), 'px');
       }
-    } else {
-      // Accept server position (initial connection or after reconnection)
-      window.gameState.updateState(state);
+    }
 
-      // Clear reconnection flag after accepting server state
-      if (this.justReconnected) {
-        console.log('[Socket.IO] Position resynchronized after reconnection');
-        this.justReconnected = false;
-      }
+    // Clear reconnection flag after accepting server state
+    if (this.justReconnected) {
+      console.log('[Socket.IO] Position resynchronized after reconnection');
+      this.justReconnected = false;
     }
 
     if (window.gameUI) {
@@ -1377,7 +1569,14 @@ class NetworkManager {
   handleGameStateDelta(delta) {
     // Save local player prediction (but NOT after reconnection)
     let localPlayerState = null;
-    if (!this.justReconnected && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+    let serverHasPlayerUpdate = false;
+
+    // Check if server sent an update for local player
+    if (delta.updated && delta.updated.players && window.gameState.playerId && delta.updated.players[window.gameState.playerId]) {
+      serverHasPlayerUpdate = true;
+    }
+
+    if (!this.justReconnected && !serverHasPlayerUpdate && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
       localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
     }
@@ -1390,6 +1589,8 @@ class NetworkManager {
         }
         Object.entries(entities).forEach(([id, entity]) => {
           window.gameState.state[type][id] = entity;
+          // Mark entity as seen to prevent orphan cleanup
+          window.gameState.markEntitySeen(type, id);
         });
       });
     }
@@ -1413,13 +1614,28 @@ class NetworkManager {
       if (delta.meta.bossSpawned !== undefined) window.gameState.state.bossSpawned = delta.meta.bossSpawned;
     }
 
-    // Restore local player prediction (but NOT after reconnection)
+    // Restore local player prediction only if:
+    // 1. We have a saved prediction
+    // 2. Server didn't send an update for our player
+    // 3. Position difference is reasonable (< 50px to allow for reconciliation)
     if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
-      window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
-      window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
-      window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
-    } else if (this.justReconnected) {
-      // Clear reconnection flag after accepting server state
+      const serverPlayer = window.gameState.state.players[window.gameState.playerId];
+      const dx = localPlayerState.x - serverPlayer.x;
+      const dy = localPlayerState.y - serverPlayer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // If distance is too large, trust server (possible desync or correction)
+      if (distance < 50) {
+        window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
+        window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
+        window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
+      } else {
+        console.log('[Socket.IO] Large position difference detected, accepting server position:', distance.toFixed(1), 'px');
+      }
+    }
+
+    // Clear reconnection flag after first delta update
+    if (this.justReconnected) {
       console.log('[Socket.IO] Position resynchronized after reconnection (delta)');
       this.justReconnected = false;
     }
@@ -1435,13 +1651,25 @@ class NetworkManager {
 
     // Force update player position to server's authoritative position
     if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
-      window.gameState.state.players[window.gameState.playerId].x = data.x;
-      window.gameState.state.players[window.gameState.playerId].y = data.y;
+      const player = window.gameState.state.players[window.gameState.playerId];
+      const oldX = player.x;
+      const oldY = player.y;
 
-      // Disable client prediction temporarily to accept correction
-      this.justReconnected = true;
+      player.x = data.x;
+      player.y = data.y;
 
-      if (window.toastManager) {
+      // Calculate correction distance for logging
+      const dx = data.x - oldX;
+      const dy = data.y - oldY;
+      const correctionDistance = Math.sqrt(dx * dx + dy * dy);
+
+      console.log('[Socket.IO] Position correction applied. Distance:', correctionDistance.toFixed(1), 'px');
+
+      // Note: We no longer set justReconnected flag here, as the reconciliation
+      // logic in handleGameStateDelta will now properly handle position corrections
+      // by checking the distance difference and accepting server position when needed
+
+      if (window.toastManager && correctionDistance > 20) {
         window.toastManager.show('⚠️ Position corrected', 'warning');
       }
     }
@@ -1507,6 +1735,22 @@ class NetworkManager {
     if (window.comboSystem) {
       window.comboSystem.resetCombo();
     }
+  }
+
+  handleSessionTimeout(data) {
+    console.log('[Socket.IO] Session timeout:', data.reason);
+
+    // Show error message to user
+    if (window.toastManager) {
+      window.toastManager.show('⏱️ Session expirée: ' + (data.reason || 'Inactivité détectée'), 'error');
+    }
+
+    // Show alert with option to reload
+    setTimeout(() => {
+      if (confirm('Votre session a expiré. Voulez-vous recharger la page ?')) {
+        window.location.reload();
+      }
+    }, 500);
   }
 
   // Send events to server
@@ -3597,6 +3841,15 @@ class GameEngine {
     this.initializeManagers();
     this.start();
 
+    // Debug mode toggle (press 'D' key)
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'd' || e.key === 'D') {
+        if (!document.querySelector('input:focus')) { // Only if not typing in input
+          window.gameState.toggleDebug();
+        }
+      }
+    });
+
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => this.cleanup());
   }
@@ -3667,6 +3920,9 @@ class GameEngine {
     // Global game state
     window.gameState = new GameStateManager();
 
+    // Session manager for reconnection handling
+    window.sessionManager = new SessionManager();
+
     // Performance settings (must be initialized early)
     if (typeof PerformanceSettingsManager !== 'undefined') {
       window.performanceSettings = new PerformanceSettingsManager();
@@ -3678,6 +3934,7 @@ class GameEngine {
     const camera = new CameraManager();
 
     // Socket.IO client configuration with proper transports and error handling
+    // Include sessionId for reconnection recovery
     const socket = io({
       transports: ['polling', 'websocket'],
       upgrade: true,
@@ -3685,7 +3942,10 @@ class GameEngine {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      timeout: 45000
+      timeout: 45000,
+      auth: {
+        sessionId: window.sessionManager.getSessionId()
+      }
     });
 
     window.networkManager = new NetworkManager(socket);
@@ -3722,13 +3982,86 @@ class GameEngine {
   }
 
   update() {
+    // Clean up orphaned entities (every 60 frames ≈ 1 second at 60 FPS)
+    if (!this._cleanupFrameCounter) this._cleanupFrameCounter = 0;
+    if (++this._cleanupFrameCounter >= 60) {
+      window.gameState.cleanupOrphanedEntities();
+      this._cleanupFrameCounter = 0;
+    }
+
     // Use CSS pixels (window dimensions) instead of physical canvas dimensions
     // to ensure proper camera centering on high-DPI displays (mobile)
     this.playerController.update(window.innerWidth, window.innerHeight);
   }
 
   render() {
+    // Apply visual interpolation for smooth movement BEFORE rendering
+    window.gameState.applyInterpolation();
+
+    // Update debug stats if debug mode is enabled
+    if (window.gameState.debugMode) {
+      window.gameState.updateDebugStats();
+    }
+
     this.renderer.render(window.gameState, window.gameState.playerId);
+
+    // Render debug overlay if enabled
+    if (window.gameState.debugMode) {
+      this.renderDebugOverlay();
+    }
+  }
+
+  renderDebugOverlay() {
+    const ctx = this.ctx;
+    const stats = window.gameState.debugStats;
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    ctx.save();
+    ctx.scale(pixelRatio, pixelRatio);
+
+    // Semi-transparent background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(10, 10, 250, 200);
+
+    // Text styling
+    ctx.fillStyle = '#00ff00';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'left';
+
+    let y = 30;
+    const lineHeight = 20;
+
+    // Title
+    ctx.fillStyle = '#ffff00';
+    ctx.fillText('DEBUG MODE (Press D to toggle)', 20, y);
+    y += lineHeight * 1.5;
+
+    // Entity counts
+    ctx.fillStyle = '#00ff00';
+    ctx.fillText(`Players: ${stats.entitiesCount.players || 0}`, 20, y);
+    y += lineHeight;
+    ctx.fillText(`Zombies: ${stats.entitiesCount.zombies || 0}`, 20, y);
+    y += lineHeight;
+    ctx.fillText(`Bullets: ${stats.entitiesCount.bullets || 0}`, 20, y);
+    y += lineHeight;
+    ctx.fillText(`Particles: ${stats.entitiesCount.particles || 0}`, 20, y);
+    y += lineHeight;
+    ctx.fillText(`Powerups: ${stats.entitiesCount.powerups || 0}`, 20, y);
+    y += lineHeight;
+    ctx.fillText(`Loot: ${stats.entitiesCount.loot || 0}`, 20, y);
+    y += lineHeight;
+
+    // Network info
+    y += 5;
+    ctx.fillStyle = '#00ffff';
+    ctx.fillText(`Last Update: ${stats.lastUpdate}ms ago`, 20, y);
+    y += lineHeight;
+
+    // Interpolation status
+    const interpStatus = window.gameState.interpolation.enabled ? 'ON' : 'OFF';
+    ctx.fillText(`Interpolation: ${interpStatus}`, 20, y);
+
+    ctx.restore();
   }
 
   gameLoop(timestamp = 0) {
