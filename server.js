@@ -6,7 +6,8 @@ const io = require('socket.io')(http, {
   perMessageDeflate: {
     threshold: 1024  // Compresser si > 1KB (réduction 30-40%)
   },
-  transports: ['websocket'],  // Privilégier WebSocket (plus performant que polling)
+  // Permettre polling comme fallback pour éviter les erreurs 400
+  // Le client upgradера automatiquement vers websocket quand disponible
   pingTimeout: 60000,
   pingInterval: 25000
 });
