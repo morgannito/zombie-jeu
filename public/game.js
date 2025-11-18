@@ -509,6 +509,7 @@ class MobileControlsManager {
     this.joystickVector = { dx: 0, dy: 0 };
     this.autoShootActive = false;
     this.autoShootInterval = null;
+    this.lastAutoShootTime = 0;
     this.currentTarget = null; // Store current auto-shoot target
 
     // Gesture detection properties
@@ -678,38 +679,49 @@ class MobileControlsManager {
   }
 
   startAutoShoot() {
-    // Auto shoot at regular intervals (server will handle fire rate limiting)
-    this.autoShootInterval = setInterval(() => {
-      if (!this.autoShootActive) return;
-
-      // Verify all required objects exist
-      if (!window.gameState || !window.networkManager || !window.playerController) return;
-
-      const player = window.gameState.getPlayer();
-      if (!player || !player.alive || !window.playerController.gameStarted) return;
-
-      // Find nearest zombie and shoot at it
-      const nearestZombie = this.findNearestZombie(player);
-      this.currentTarget = nearestZombie; // Store for visual indicator
-
-      if (nearestZombie) {
-        const angle = Math.atan2(
-          nearestZombie.y - player.y,
-          nearestZombie.x - player.x
-        );
-        // Mettre à jour l'angle visuel du canon
-        player.angle = angle;
-        window.networkManager.shoot(angle);
-      }
-    }, CONSTANTS.MOBILE.AUTO_SHOOT_INTERVAL);
+    // Initialize auto-shoot timestamp
+    this.lastAutoShootTime = 0;
   }
 
   stopAutoShoot() {
-    if (this.autoShootInterval) {
-      clearInterval(this.autoShootInterval);
-      this.autoShootInterval = null;
-    }
     this.currentTarget = null; // Clear target when stopping
+    this.lastAutoShootTime = 0;
+  }
+
+  /**
+   * Update auto-shoot logic (called from main game loop)
+   * @param {number} currentTime - Current timestamp in ms
+   */
+  updateAutoShoot(currentTime) {
+    if (!this.autoShootActive) return;
+
+    // Check if enough time has passed since last shot
+    if (currentTime - this.lastAutoShootTime < CONSTANTS.MOBILE.AUTO_SHOOT_INTERVAL) {
+      return;
+    }
+
+    // Verify all required objects exist
+    if (!window.gameState || !window.networkManager || !window.playerController) return;
+
+    const player = window.gameState.getPlayer();
+    if (!player || !player.alive || !window.playerController.gameStarted) return;
+
+    // Find nearest zombie and shoot at it
+    const nearestZombie = this.findNearestZombie(player);
+    this.currentTarget = nearestZombie; // Store for visual indicator
+
+    if (nearestZombie) {
+      const angle = Math.atan2(
+        nearestZombie.y - player.y,
+        nearestZombie.x - player.x
+      );
+      // Mettre à jour l'angle visuel du canon
+      player.angle = angle;
+      window.networkManager.shoot(angle);
+
+      // Update last shot time
+      this.lastAutoShootTime = currentTime;
+    }
   }
 
   getCurrentTarget() {
@@ -933,11 +945,18 @@ class CameraManager {
     this.y = 0;
     this.width = 0;
     this.height = 0;
+    this.easingFactor = 0.1; // Camera smoothness (0.1 = smooth, 1 = instant)
   }
 
   follow(player, canvasWidth, canvasHeight) {
-    this.x = player.x - canvasWidth / 2;
-    this.y = player.y - canvasHeight / 2;
+    // Calculate target camera position
+    const targetX = player.x - canvasWidth / 2;
+    const targetY = player.y - canvasHeight / 2;
+
+    // Apply easing for smooth camera movement
+    this.x += (targetX - this.x) * this.easingFactor;
+    this.y += (targetY - this.y) * this.easingFactor;
+
     this.width = canvasWidth;
     this.height = canvasHeight;
   }
@@ -1885,6 +1904,9 @@ class PlayerController {
     // Only allow movement after game has started
     if (!this.gameStarted) return;
 
+    // Cache current time for performance (avoid multiple Date.now() calls)
+    const now = Date.now();
+
     // Update movement
     const { dx, dy } = this.input.getMovementVector();
 
@@ -1893,11 +1915,11 @@ class PlayerController {
       let speed = this.gameState.config.PLAYER_SPEED;
       speed *= (player.speedMultiplier || 1);
 
-      if (player.speedBoost && Date.now() < player.speedBoost) {
+      if (player.speedBoost && now < player.speedBoost) {
         speed *= 1.5;
       }
 
-      if (player.slowedUntil && Date.now() < player.slowedUntil) {
+      if (player.slowedUntil && now < player.slowedUntil) {
         speed *= (player.slowAmount || 1);
       }
 
@@ -2574,7 +2596,7 @@ class Renderer {
       // Taches/veines explosives sur le corps
       this.ctx.strokeStyle = '#ff00ff';
       this.ctx.lineWidth = 2;
-      this.ctx.globalAlpha = 0.6 + Math.sin(Date.now() / 100) * 0.3; // Pulsation
+      this.ctx.globalAlpha = 0.6 + Math.sin(timestamp / 100) * 0.3; // Pulsation
       this.ctx.beginPath();
       this.ctx.moveTo(0, -5 * baseSize * scale);
       this.ctx.lineTo(-5, 0);
@@ -2602,7 +2624,7 @@ class Renderer {
       this.ctx.globalAlpha = 1;
     } else if (zombie.type === 'poison') {
       // Aura toxique verte pulsante
-      const pulseAmount = Math.sin(Date.now() / 200) * 0.15;
+      const pulseAmount = Math.sin(timestamp / 200) * 0.15;
       this.ctx.strokeStyle = '#22ff22';
       this.ctx.lineWidth = 2;
       this.ctx.globalAlpha = 0.4 + pulseAmount;
@@ -4747,7 +4769,7 @@ class GameEngine {
     }
   }
 
-  update() {
+  update(deltaTime = 16) {
     // Clean up orphaned entities (every 60 frames ≈ 1 second at 60 FPS)
     if (!this._cleanupFrameCounter) this._cleanupFrameCounter = 0;
     if (++this._cleanupFrameCounter >= 60) {
@@ -4757,7 +4779,12 @@ class GameEngine {
 
     // Update screen effects (trails decay, etc.) (SCREEN EFFECTS)
     if (window.screenEffects) {
-      window.screenEffects.update();
+      window.screenEffects.update(deltaTime);
+    }
+
+    // Update mobile auto-shoot (MOBILE)
+    if (this.mobileControls && this.mobileControls.updateAutoShoot) {
+      this.mobileControls.updateAutoShoot(performance.now());
     }
 
     // Use CSS pixels (window dimensions) instead of physical canvas dimensions
@@ -4845,7 +4872,7 @@ class GameEngine {
     // Only update/render if enough time has passed
     if (deltaTime >= targetFrameTime) {
       try {
-        this.update();
+        this.update(deltaTime);
         this.render();
 
         // Notify performance settings for FPS counting
