@@ -887,9 +887,9 @@ class ComboSystem {
   }
 
   updateCombo(data) {
-    this.combo = data.combo;
-    this.multiplier = data.multiplier;
-    this.score = data.score;
+    this.combo = data.combo ?? 0;
+    this.multiplier = data.multiplier ?? 1;
+    this.score = data.score ?? 0;
 
     // Afficher le combo
     if (this.combo > 1) {
@@ -3736,6 +3736,15 @@ function initMinimapToggle() {
     console.log('✅ Minimap toggle initialized (mobile)');
   }
 }
+
+/* ============================================
+   EXPORT CLASSES FOR GAME PATCHES
+   ============================================ */
+
+// Export classes to window for gamePatch.js
+window.GameEngine = GameEngine;
+window.Renderer = Renderer;
+window.PlayerController = PlayerController;
 
 /* ============================================
    GAME INITIALIZATION
