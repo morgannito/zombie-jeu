@@ -1626,7 +1626,8 @@ class NetworkManager {
             // Only interpolate if distance is reasonable (< 50px)
             // For larger distances, accept server position immediately (likely a correction)
             if (distance < 50) {
-              const interpolationFactor = window.gameState.interpolation.factor || 0.3;
+              // Use a higher interpolation factor for local player (more responsive and fluid)
+              const interpolationFactor = 0.6;
               entity.x = currentPlayer.x + dx * interpolationFactor;
               entity.y = currentPlayer.y + dy * interpolationFactor;
             }
@@ -1732,8 +1733,8 @@ class NetworkManager {
       const correctionDistance = Math.sqrt(dx * dx + dy * dy);
 
       // FIX: Apply smooth interpolation instead of instant teleport
-      // Use the same interpolation factor as zombies for consistency
-      const interpolationFactor = window.gameState.interpolation.factor || 0.3;
+      // Use a higher interpolation factor for local player (more responsive)
+      const interpolationFactor = 0.6;
 
       // Interpolate position smoothly
       player.x += dx * interpolationFactor;
