@@ -993,9 +993,11 @@ function gameLoop() {
           zombieManager.restartZombieSpawner();
 
           // Notifier tous les joueurs de la nouvelle vague
+          // CORRECTION: Plafonner le calcul pour éviter surcharge à hautes vagues
+          const effectiveWave = Math.min(gameState.wave, 100);
           io.emit('newWave', {
             wave: gameState.wave,
-            zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 7 // Mis à jour pour correspondre à la nouvelle progression améliorée
+            zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (effectiveWave - 1) * 7
           });
 
           // Bonus de santé pour les joueurs survivants
