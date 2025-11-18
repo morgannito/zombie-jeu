@@ -585,6 +585,90 @@ function gameLoop() {
       }
     }
 
+    // Capacité spéciale : Zombie Téléporteur - se téléporte près du joueur
+    if (zombie.type === 'teleporter') {
+      const teleporterType = ZOMBIE_TYPES.teleporter;
+
+      if (!zombie.lastTeleport || now - zombie.lastTeleport >= teleporterType.teleportCooldown) {
+        const closestPlayer = collisionManager.findClosestPlayer(
+          zombie.x, zombie.y, Infinity,
+          { ignoreSpawnProtection: true, ignoreInvisible: true }
+        );
+
+        if (closestPlayer) {
+          const distToPlayer = distance(zombie.x, zombie.y, closestPlayer.x, closestPlayer.y);
+
+          // Se téléporter uniquement si assez loin du joueur
+          if (distToPlayer > teleporterType.teleportRange) {
+            zombie.lastTeleport = now;
+
+            // Angle vers le joueur
+            const angleToPlayer = Math.atan2(closestPlayer.y - zombie.y, closestPlayer.x - zombie.x);
+
+            // Distance aléatoire entre min et max range
+            const teleportDistance = teleporterType.teleportMinRange +
+              Math.random() * (teleporterType.teleportRange - teleporterType.teleportMinRange);
+
+            // Nouvelle position près du joueur
+            const newX = closestPlayer.x - Math.cos(angleToPlayer) * teleportDistance;
+            const newY = closestPlayer.y - Math.sin(angleToPlayer) * teleportDistance;
+
+            // Vérifier collision avec murs
+            if (!roomManager.checkWallCollision(newX, newY, zombie.size)) {
+              // Créer particules à l'ancienne position
+              createParticles(zombie.x, zombie.y, teleporterType.color, 15);
+
+              // Téléporter
+              zombie.x = newX;
+              zombie.y = newY;
+
+              // Créer particules à la nouvelle position
+              createParticles(zombie.x, zombie.y, teleporterType.color, 15);
+            }
+          }
+        }
+      }
+    }
+
+    // Capacité spéciale : Zombie Invocateur - invoque des mini-zombies
+    if (zombie.type === 'summoner') {
+      const summonerType = ZOMBIE_TYPES.summoner;
+
+      // Compter les minions actuels de cet invocateur
+      let currentMinions = 0;
+      for (let zId in gameState.zombies) {
+        const z = gameState.zombies[zId];
+        if (z.summonerId === zombieId) {
+          currentMinions++;
+        }
+      }
+      zombie.minionCount = currentMinions;
+
+      // Invoquer si cooldown passé et pas trop de minions
+      if (currentMinions < summonerType.maxMinions &&
+          (!zombie.lastSummon || now - zombie.lastSummon >= summonerType.summonCooldown)) {
+        zombie.lastSummon = now;
+
+        // Invoquer plusieurs minions
+        const minionsToSpawn = Math.min(
+          summonerType.minionsPerSummon,
+          summonerType.maxMinions - currentMinions
+        );
+
+        for (let i = 0; i < minionsToSpawn; i++) {
+          const spawned = zombieManager.spawnMinion(zombieId, zombie.x, zombie.y);
+          if (spawned) {
+            zombie.minionCount++;
+          }
+        }
+
+        // Effet visuel d'invocation
+        if (minionsToSpawn > 0) {
+          createParticles(zombie.x, zombie.y, summonerType.color, 20);
+        }
+      }
+    }
+
     // Trouver le joueur le plus proche (OPTIMISÉ avec Quadtree)
     const closestPlayer = collisionManager.findClosestPlayer(
       zombie.x, zombie.y, Infinity,
@@ -594,6 +678,12 @@ function gameLoop() {
     // Déplacer le zombie vers le joueur ou de manière aléatoire
     if (closestPlayer) {
       const angle = Math.atan2(closestPlayer.y - zombie.y, closestPlayer.x - zombie.x);
+
+      // Mettre à jour l'angle de facing pour le Zombie Bouclier
+      if (zombie.type === 'shielded') {
+        zombie.facingAngle = angle;
+      }
+
       const newX = zombie.x + MathUtils.fastCos(angle) * zombie.speed;
       const newY = zombie.y + MathUtils.fastSin(angle) * zombie.speed;
 
@@ -811,7 +901,31 @@ function gameLoop() {
         continue;
       }
 
-      zombie.health -= bullet.damage;
+      // Calculer les dégâts avec réduction pour Zombie Bouclier
+      let finalDamage = bullet.damage;
+
+      if (zombie.type === 'shielded' && zombie.facingAngle !== null) {
+        const shieldedType = ZOMBIE_TYPES.shielded;
+
+        // Angle de la balle par rapport au zombie
+        const bulletAngle = Math.atan2(bullet.vy, bullet.vx);
+
+        // Différence d'angle (normalisée entre -PI et PI)
+        let angleDiff = bulletAngle - zombie.facingAngle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+        // Si la balle vient de face (dans l'angle du bouclier)
+        if (Math.abs(angleDiff) < shieldedType.shieldAngle) {
+          // Réduire les dégâts
+          finalDamage *= shieldedType.frontDamageReduction;
+
+          // Effet visuel de bouclier (particules cyan)
+          createParticles(zombie.x, zombie.y, '#00ffff', 10);
+        }
+      }
+
+      zombie.health -= finalDamage;
 
       // Vol de vie pour le joueur
       if (bullet.playerId) {

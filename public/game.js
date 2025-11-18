@@ -2652,6 +2652,29 @@ class Renderer {
         this.ctx.strokeRect(zombie.x - barWidth / 2, barY, barWidth, 5);
       }
 
+      // Elite zombie indicator (golden glow)
+      if (zombie.isElite) {
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.4 + Math.sin(timestamp / 200) * 0.2;
+        this.ctx.shadowBlur = 20;
+        this.ctx.shadowColor = '#ffd700';
+        this.ctx.strokeStyle = '#ffd700';
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        this.ctx.arc(zombie.x, zombie.y, zombie.size + 15, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.restore();
+
+        // Elite crown
+        this.ctx.fillStyle = '#ffd700';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.font = 'bold 20px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.strokeText('👑', zombie.x, zombie.y - zombie.size - 35);
+        this.ctx.fillText('👑', zombie.x, zombie.y - zombie.size - 35);
+      }
+
       // Boss label
       if (zombie.isBoss) {
         this.ctx.fillStyle = '#fff';
@@ -2724,6 +2747,89 @@ class Renderer {
       this.ctx.lineWidth = 2;
       this.ctx.strokeText('☠', zombie.x, zombie.y);
       this.ctx.fillText('☠', zombie.x, zombie.y);
+    } else if (zombie.type === 'teleporter') {
+      // Purple portal effect
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 150) * 0.2;
+      this.ctx.strokeStyle = '#9900ff';
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 12, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      this.ctx.fillStyle = '#9900ff';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 18px Arial';
+      this.ctx.strokeText('⚡', zombie.x, zombie.y);
+      this.ctx.fillText('⚡', zombie.x, zombie.y);
+    } else if (zombie.type === 'summoner') {
+      // Dark purple magic aura
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.35 + Math.sin(Date.now() / 180) * 0.15;
+      this.ctx.strokeStyle = '#cc00ff';
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 14 + Math.sin(Date.now() / 250) * 4, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      this.ctx.fillStyle = '#cc00ff';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 18px Arial';
+      this.ctx.strokeText('🔮', zombie.x, zombie.y);
+      this.ctx.fillText('🔮', zombie.x, zombie.y);
+
+      // Show minion count
+      if (zombie.minionCount > 0) {
+        this.ctx.font = 'bold 10px Arial';
+        this.ctx.fillStyle = '#fff';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeText(`${zombie.minionCount}`, zombie.x + zombie.size * 0.6, zombie.y - zombie.size * 0.6);
+        this.ctx.fillText(`${zombie.minionCount}`, zombie.x + zombie.size * 0.6, zombie.y - zombie.size * 0.6);
+      }
+    } else if (zombie.type === 'shielded') {
+      // Draw shield indicator (arc in facing direction)
+      if (zombie.facingAngle !== null && zombie.facingAngle !== undefined) {
+        this.ctx.save();
+        this.ctx.translate(zombie.x, zombie.y);
+        this.ctx.rotate(zombie.facingAngle);
+
+        // Shield arc (90 degrees in front)
+        this.ctx.strokeStyle = '#00ccff';
+        this.ctx.fillStyle = 'rgba(0, 204, 255, 0.3)';
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        const shieldRadius = zombie.size + 10;
+        this.ctx.arc(0, 0, shieldRadius, -Math.PI / 4, Math.PI / 4);
+        this.ctx.lineTo(0, 0);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        this.ctx.restore();
+      }
+
+      // Shield icon
+      this.ctx.fillStyle = '#00ccff';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 18px Arial';
+      this.ctx.strokeText('🛡️', zombie.x, zombie.y);
+      this.ctx.fillText('🛡️', zombie.x, zombie.y);
+    } else if (zombie.type === 'minion') {
+      // Small indicator for minions
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.4;
+      this.ctx.strokeStyle = '#ff99ff';
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 5, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
     }
   }
 
