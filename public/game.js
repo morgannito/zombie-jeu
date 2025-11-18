@@ -51,6 +51,8 @@ class GameStateManager {
       bullets: {},
       powerups: {},
       particles: {},
+      poisonTrails: {},
+      explosions: {},
       loot: {},
       walls: [],
       currentRoom: 0,
@@ -1314,9 +1316,15 @@ class NetworkManager {
   }
 
   handleGameStateDelta(delta) {
+    // Safety check: ensure gameState and state exist
+    if (!window.gameState || !window.gameState.state) {
+      console.warn('gameState not initialized, ignoring delta');
+      return;
+    }
+
     // Save local player prediction
     let localPlayerState = null;
-    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+    if (window.gameState.state.players && window.gameState.playerId && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
       localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
     }
@@ -1324,9 +1332,12 @@ class NetworkManager {
     // Apply delta updates
     if (delta.updated) {
       Object.entries(delta.updated).forEach(([type, entities]) => {
+        // Initialize the type if it doesn't exist
         if (!window.gameState.state[type]) {
           window.gameState.state[type] = {};
         }
+
+        // Update or add entities
         Object.entries(entities).forEach(([id, entity]) => {
           window.gameState.state[type][id] = entity;
         });
@@ -1353,12 +1364,13 @@ class NetworkManager {
     }
 
     // Restore local player prediction
-    if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+    if (localPlayerState && window.gameState.state.players && window.gameState.playerId && window.gameState.state.players[window.gameState.playerId]) {
       window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
       window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
       window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
     }
 
+    // Update UI
     if (window.gameUI) {
       window.gameUI.update();
     }
