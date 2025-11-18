@@ -57,10 +57,29 @@
         </div>
 
         <div id="game-over" style="display: none;">
-            <h1>GAME OVER</h1>
-            <p>Score final: <span id="final-score">0</span></p>
-            <p>Vague atteinte: <span id="final-wave">1</span></p>
-            <button id="respawn-btn">Recommencer</button>
+            <div class="game-over-header">
+                <h1>💀 GAME OVER 💀</h1>
+                <p class="game-over-subtitle">Vous êtes mort...</p>
+            </div>
+            <div class="game-over-stats">
+                <div class="stat-row main-stat">
+                    <span class="stat-label">🏆 Score Final</span>
+                    <span class="stat-value" id="final-score">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">📊 Vague atteinte</span>
+                    <span class="stat-value" id="final-wave">1</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">⬆️ Niveau atteint</span>
+                    <span class="stat-value" id="final-level">1</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">💰 Or gagné</span>
+                    <span class="stat-value" id="final-gold">0</span>
+                </div>
+            </div>
+            <button id="respawn-btn">🔄 Recommencer</button>
         </div>
 
         <div id="shop" style="display: none;">
@@ -112,43 +131,54 @@
             </div>
         </div>
 
-        <div id="instructions">
-            <h3>🎮 Contrôles</h3>
-            <div class="control-item">
-                <div class="control-keys">
-                    <span class="key">W</span>
-                    <span class="key">A</span>
-                    <span class="key">S</span>
-                    <span class="key">D</span>
-                    <span class="control-separator">ou</span>
-                    <span class="key">↑</span>
-                    <span class="key">←</span>
-                    <span class="key">↓</span>
-                    <span class="key">→</span>
-                </div>
-                <div class="control-description">🏃 Déplacement</div>
+        <div id="instructions" class="collapsed">
+            <div id="instructions-header">
+                <h3>🎮 Contrôles</h3>
+                <button id="instructions-toggle" aria-label="Toggle instructions">▼</button>
             </div>
-            <div class="control-item">
-                <div class="control-keys">
-                    <span class="key-icon">🖱️</span>
+            <div id="instructions-content">
+                <div class="control-item">
+                    <div class="control-keys">
+                        <span class="key">W</span>
+                        <span class="key">A</span>
+                        <span class="key">S</span>
+                        <span class="key">D</span>
+                        <span class="control-separator">ou</span>
+                        <span class="key">↑</span>
+                        <span class="key">←</span>
+                        <span class="key">↓</span>
+                        <span class="key">→</span>
+                    </div>
+                    <div class="control-description">🏃 Déplacement</div>
                 </div>
-                <div class="control-description">🎯 Viser</div>
-            </div>
-            <div class="control-item">
-                <div class="control-keys">
-                    <span class="key">Clic</span>
+                <div class="control-item">
+                    <div class="control-keys">
+                        <span class="key-icon">🖱️</span>
+                    </div>
+                    <div class="control-description">🎯 Viser</div>
                 </div>
-                <div class="control-description">💥 Tirer</div>
-            </div>
-            <div class="control-item">
-                <div class="control-keys">
-                    <span class="key">TAB</span>
+                <div class="control-item">
+                    <div class="control-keys">
+                        <span class="key">Clic</span>
+                    </div>
+                    <div class="control-description">💥 Tirer</div>
                 </div>
-                <div class="control-description">📊 Statistiques</div>
+                <div class="control-item">
+                    <div class="control-keys">
+                        <span class="key">TAB</span>
+                    </div>
+                    <div class="control-description">📊 Statistiques</div>
+                </div>
             </div>
         </div>
 
         <canvas id="minimap"></canvas>
+        <button id="minimap-toggle" aria-label="Toggle minimap" style="display: none;">
+            📍
+        </button>
+
+        <!-- Toast Notifications Container -->
+        <div id="toast-container"></div>
 
         <!-- Mobile Controls -->
         <div id="mobile-controls" style="display: none;">

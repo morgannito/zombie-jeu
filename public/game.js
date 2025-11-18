@@ -792,47 +792,98 @@ class ComboSystem {
   }
 
   createUI() {
+    // Détecter si on est sur mobile
+    const isMobile = window.innerWidth <= 768;
+
     // Créer l'élément d'affichage du combo
     this.comboElement = document.createElement('div');
     this.comboElement.id = 'combo-display';
-    this.comboElement.style.cssText = `
-      position: fixed;
-      top: 120px;
-      right: 20px;
-      background: rgba(255, 100, 0, 0.9);
-      padding: 15px 25px;
-      border-radius: 10px;
-      font-size: 32px;
-      font-weight: bold;
-      color: white;
-      text-align: center;
-      z-index: 1000;
-      display: none;
-      box-shadow: 0 0 20px rgba(255, 100, 0, 0.5);
-      border: 3px solid rgba(255, 150, 0, 0.8);
-      transform: scale(1);
-      transition: transform 0.2s ease;
-    `;
+
+    // Styles adaptés pour mobile ou desktop
+    if (isMobile) {
+      this.comboElement.style.cssText = `
+        position: fixed;
+        top: 60px;
+        right: 8px;
+        background: rgba(255, 100, 0, 0.6);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        text-align: center;
+        z-index: 1000;
+        display: none;
+        box-shadow: 0 0 15px rgba(255, 100, 0, 0.4);
+        border: 2px solid rgba(255, 150, 0, 0.6);
+        transform: scale(1);
+        transition: transform 0.2s ease;
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+      `;
+    } else {
+      this.comboElement.style.cssText = `
+        position: fixed;
+        top: 120px;
+        right: 20px;
+        background: rgba(255, 100, 0, 0.9);
+        padding: 15px 25px;
+        border-radius: 10px;
+        font-size: 32px;
+        font-weight: bold;
+        color: white;
+        text-align: center;
+        z-index: 1000;
+        display: none;
+        box-shadow: 0 0 20px rgba(255, 100, 0, 0.5);
+        border: 3px solid rgba(255, 150, 0, 0.8);
+        transform: scale(1);
+        transition: transform 0.2s ease;
+      `;
+    }
     document.body.appendChild(this.comboElement);
 
     // Créer l'élément d'affichage du score
     this.scoreElement = document.createElement('div');
     this.scoreElement.id = 'score-display';
-    this.scoreElement.style.cssText = `
-      position: fixed;
-      top: 70px;
-      right: 20px;
-      background: rgba(30, 30, 60, 0.9);
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 20px;
-      font-weight: bold;
-      color: #FFD700;
-      z-index: 1000;
-      border: 2px solid rgba(255, 215, 0, 0.5);
-    `;
+
+    // Styles adaptés pour mobile ou desktop
+    if (isMobile) {
+      this.scoreElement.style.cssText = `
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        background: rgba(30, 30, 60, 0.6);
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 13px;
+        font-weight: bold;
+        color: #FFD700;
+        z-index: 1000;
+        border: 1px solid rgba(255, 215, 0, 0.4);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+      `;
+    } else {
+      this.scoreElement.style.cssText = `
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        background: rgba(30, 30, 60, 0.9);
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 20px;
+        font-weight: bold;
+        color: #FFD700;
+        z-index: 1000;
+        border: 2px solid rgba(255, 215, 0, 0.5);
+      `;
+    }
     this.scoreElement.innerHTML = '🏆 Score: 0';
     document.body.appendChild(this.scoreElement);
+
+    // Stocker si mobile pour les ajustements dynamiques
+    this.isMobile = isMobile;
   }
 
   updateCombo(data) {
@@ -850,18 +901,25 @@ class ComboSystem {
       else if (this.multiplier >= 5) color = '#ff3300';
       else if (this.multiplier >= 3) color = '#ff5500';
 
-      this.comboElement.style.background = `rgba(${parseInt(color.slice(1,3), 16)}, ${parseInt(color.slice(3,5), 16)}, ${parseInt(color.slice(5,7), 16)}, 0.9)`;
-      this.comboElement.style.boxShadow = `0 0 30px ${color}`;
+      // Adapter l'opacité selon mobile ou desktop
+      const opacity = this.isMobile ? 0.6 : 0.9;
+      this.comboElement.style.background = `rgba(${parseInt(color.slice(1,3), 16)}, ${parseInt(color.slice(3,5), 16)}, ${parseInt(color.slice(5,7), 16)}, ${opacity})`;
 
+      const shadowSize = this.isMobile ? 15 : 30;
+      this.comboElement.style.boxShadow = `0 0 ${shadowSize}px ${color}`;
+
+      // Adapter la taille du texte selon mobile ou desktop
+      const multiplierFontSize = this.isMobile ? '12px' : '24px';
       let comboText = `${this.combo} COMBO`;
       if (this.multiplier > 1) {
-        comboText += `<br><span style="font-size: 24px; color: #FFD700;">x${this.multiplier} MULTIPLICATEUR</span>`;
+        comboText += `<br><span style="font-size: ${multiplierFontSize}; color: #FFD700;">x${this.multiplier} MULTI</span>`;
       }
 
       this.comboElement.innerHTML = comboText;
 
-      // Animation de pulsation
-      this.comboElement.style.transform = 'scale(1.2)';
+      // Animation de pulsation (réduite sur mobile)
+      const scaleAmount = this.isMobile ? 1.1 : 1.2;
+      this.comboElement.style.transform = `scale(${scaleAmount})`;
       setTimeout(() => {
         if (this.comboElement) {
           this.comboElement.style.transform = 'scale(1)';
@@ -870,10 +928,12 @@ class ComboSystem {
 
       // Animation bonus pour les gros combos (tous les 10 kills)
       if (this.combo % 10 === 0) {
-        this.comboElement.style.fontSize = '40px';
+        const bigFontSize = this.isMobile ? '20px' : '40px';
+        const normalFontSize = this.isMobile ? '16px' : '32px';
+        this.comboElement.style.fontSize = bigFontSize;
         setTimeout(() => {
           if (this.comboElement) {
-            this.comboElement.style.fontSize = '32px';
+            this.comboElement.style.fontSize = normalFontSize;
           }
         }, 300);
       }
@@ -899,6 +959,91 @@ class ComboSystem {
         }
       }, 300);
     }
+  }
+}
+
+/* ============================================
+   TOAST NOTIFICATION SYSTEM
+   ============================================ */
+
+class ToastManager {
+  constructor() {
+    this.container = document.getElementById('toast-container');
+    this.toasts = [];
+  }
+
+  show(options) {
+    const {
+      title = '',
+      message = '',
+      type = 'info', // success, info, warning, error
+      icon = this.getDefaultIcon(type),
+      duration = 3000
+    } = options;
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+      <div class="toast-icon">${icon}</div>
+      <div class="toast-content">
+        ${title ? `<div class="toast-title">${title}</div>` : ''}
+        <div class="toast-message">${message}</div>
+      </div>
+    `;
+
+    // Add to container
+    this.container.appendChild(toast);
+    this.toasts.push(toast);
+
+    // Auto remove after duration
+    if (duration > 0) {
+      setTimeout(() => {
+        this.remove(toast);
+      }, duration);
+    }
+
+    return toast;
+  }
+
+  remove(toast) {
+    toast.classList.add('removing');
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+      this.toasts = this.toasts.filter(t => t !== toast);
+    }, 300); // Match animation duration
+  }
+
+  getDefaultIcon(type) {
+    const icons = {
+      success: '✅',
+      info: 'ℹ️',
+      warning: '⚠️',
+      error: '❌'
+    };
+    return icons[type] || icons.info;
+  }
+
+  success(message, title) {
+    return this.show({ title, message, type: 'success' });
+  }
+
+  info(message, title) {
+    return this.show({ title, message, type: 'info' });
+  }
+
+  warning(message, title) {
+    return this.show({ title, message, type: 'warning' });
+  }
+
+  error(message, title) {
+    return this.show({ title, message, type: 'error' });
+  }
+
+  clear() {
+    this.toasts.forEach(toast => this.remove(toast));
   }
 }
 
@@ -2764,16 +2909,32 @@ class UIManager {
 
     // Health bar
     const healthPercent = (player.health / player.maxHealth) * 100;
+    const healthBar = document.getElementById('health-bar');
     document.getElementById('health-fill').style.width = healthPercent + '%';
     document.getElementById('health-text').textContent = Math.max(0, Math.round(player.health));
+
+    // Low health warning (< 30%)
+    if (healthPercent < 30) {
+      healthBar.classList.add('low-health');
+    } else {
+      healthBar.classList.remove('low-health');
+    }
 
     // XP and level
     if (player.level && player.xp !== undefined) {
       const xpNeeded = this.getXPForLevel(player.level);
       const xpPercent = (player.xp / xpNeeded) * 100;
+      const xpBar = document.getElementById('xp-bar');
       document.getElementById('xp-fill').style.width = xpPercent + '%';
       document.getElementById('level-text').textContent = player.level;
       document.getElementById('xp-text').textContent = `${Math.floor(player.xp)}/${xpNeeded}`;
+
+      // Near level up indicator (> 85%)
+      if (xpPercent > 85) {
+        xpBar.classList.add('near-levelup');
+      } else {
+        xpBar.classList.remove('near-levelup');
+      }
     }
 
     // Stats
@@ -2784,8 +2945,10 @@ class UIManager {
     // Game over
     if (!player.alive) {
       document.getElementById('game-over').style.display = 'block';
-      document.getElementById('final-score').textContent = player.totalScore || player.score || 0;
+      document.getElementById('final-score').textContent = (player.totalScore || player.score || 0).toLocaleString();
       document.getElementById('final-wave').textContent = `${this.gameState.state.wave || 1}`;
+      document.getElementById('final-level').textContent = player.level || 1;
+      document.getElementById('final-gold').textContent = (player.gold || 0).toLocaleString();
 
       // Sauvegarder dans le leaderboard (une seule fois)
       if (!this.deathRecorded && window.leaderboardSystem) {
@@ -3378,6 +3541,7 @@ class GameEngine {
     window.audioManager = new AudioManager(); // Audio feedback
     window.comboSystem = new ComboSystem(); // Système de combos
     window.leaderboardSystem = new LeaderboardSystem(); // Système de classement
+    window.toastManager = new ToastManager(); // Système de notifications
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
@@ -3502,14 +3666,85 @@ class GameEngine {
 }
 
 /* ============================================
+   INSTRUCTIONS TOGGLE HANDLER
+   ============================================ */
+
+function initInstructionsToggle() {
+  const instructionsPanel = document.getElementById('instructions');
+  const instructionsToggle = document.getElementById('instructions-toggle');
+  const instructionsHeader = document.getElementById('instructions-header');
+
+  if (!instructionsPanel || !instructionsToggle || !instructionsHeader) {
+    console.warn('Instructions elements not found');
+    return;
+  }
+
+  // Toggle function
+  const toggleInstructions = () => {
+    instructionsPanel.classList.toggle('collapsed');
+
+    // Update button icon
+    if (instructionsPanel.classList.contains('collapsed')) {
+      instructionsToggle.textContent = '▼';
+    } else {
+      instructionsToggle.textContent = '▲';
+    }
+  };
+
+  // Add click event listeners
+  instructionsHeader.addEventListener('click', toggleInstructions);
+
+  // Prevent double-toggle when clicking the button directly
+  instructionsToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  console.log('✅ Instructions toggle initialized');
+}
+
+/* ============================================
+   MINIMAP TOGGLE HANDLER (MOBILE)
+   ============================================ */
+
+function initMinimapToggle() {
+  const minimap = document.getElementById('minimap');
+  const minimapToggle = document.getElementById('minimap-toggle');
+
+  if (!minimap || !minimapToggle) {
+    console.warn('Minimap elements not found');
+    return;
+  }
+
+  // Check if mobile
+  const isMobile = window.innerWidth <= 768;
+
+  if (isMobile) {
+    // Start with minimap hidden on mobile
+    minimap.classList.add('hidden-mobile');
+
+    // Toggle function
+    minimapToggle.addEventListener('click', () => {
+      minimap.classList.toggle('hidden-mobile');
+      minimapToggle.classList.toggle('active');
+    });
+
+    console.log('✅ Minimap toggle initialized (mobile)');
+  }
+}
+
+/* ============================================
    GAME INITIALIZATION
    ============================================ */
 
 // Start the game when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
+    initInstructionsToggle();
+    initMinimapToggle();
     new GameEngine();
   });
 } else {
+  initInstructionsToggle();
+  initMinimapToggle();
   new GameEngine();
 }
