@@ -1616,23 +1616,8 @@ class NetworkManager {
           window.gameState.state[type] = {};
         }
         Object.entries(entities).forEach(([id, entity]) => {
-          // FIX: Interpolate local player position updates from server to prevent stuttering
-          if (type === 'players' && id === window.gameState.playerId && window.gameState.state[type][id]) {
-            const currentPlayer = window.gameState.state[type][id];
-            const dx = entity.x - currentPlayer.x;
-            const dy = entity.y - currentPlayer.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            // Only interpolate if distance is reasonable (< 50px)
-            // For larger distances, accept server position immediately (likely a correction)
-            if (distance < 50) {
-              // Use a higher interpolation factor for local player (more responsive and fluid)
-              const interpolationFactor = 0.6;
-              entity.x = currentPlayer.x + dx * interpolationFactor;
-              entity.y = currentPlayer.y + dy * interpolationFactor;
-            }
-          }
-
+          // Don't interpolate local player here - client-side prediction handles it
+          // Interpolation is only applied in handlePositionCorrection for explicit server corrections
           window.gameState.state[type][id] = entity;
           // Mark entity as seen to prevent orphan cleanup
           window.gameState.markEntitySeen(type, id);
