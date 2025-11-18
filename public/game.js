@@ -1873,10 +1873,10 @@ class PlayerController {
     this.gameStarted = false;
     this.spawnProtectionEndTime = 0;
 
-    // OPTIMIZATION: Throttle playerMove to match server tick rate (30 FPS)
-    // Reduces bandwidth and prevents micro-desyncs causing stuttering
+    // ULTRA-SMOOTH: Throttle playerMove to match server tick rate (200 FPS)
+    // Maximum responsiveness and precision
     this.lastNetworkUpdate = 0;
-    this.networkUpdateInterval = 1000 / 30; // 33ms = 30 FPS to match server
+    this.networkUpdateInterval = 1000 / 200; // 5ms = 200 FPS to match server
   }
 
   setNickname(nickname) {
@@ -1996,8 +1996,8 @@ class PlayerController {
         player.y = finalY;
         player.angle = angle;
 
-        // OPTIMIZATION: Throttle network updates to match server tick rate (30 FPS)
-        // This reduces bandwidth and prevents micro-desyncs
+        // ULTRA-SMOOTH: Throttle network updates to match server tick rate (200 FPS)
+        // Maximum responsiveness and precision
         if (now - this.lastNetworkUpdate >= this.networkUpdateInterval) {
           this.network.playerMove(finalX, finalY, angle);
           this.lastNetworkUpdate = now;

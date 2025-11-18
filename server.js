@@ -114,7 +114,7 @@ const rateLimits = new Map();
 
 const RATE_LIMIT_CONFIG = {
   'shoot': { maxRequests: 50, windowMs: 1000 },
-  'playerMove': { maxRequests: 60, windowMs: 1000 },
+  'playerMove': { maxRequests: 250, windowMs: 1000 }, // Increased for 200 FPS server
   'setNickname': { maxRequests: 3, windowMs: 10000 },
   'selectUpgrade': { maxRequests: 10, windowMs: 5000 },
   'buyItem': { maxRequests: 20, windowMs: 5000 },
@@ -1503,12 +1503,13 @@ initializeRooms();
 // Delta compression géré par NetworkManager (voir lib/server/NetworkManager.js)
 
 // Game loop à 30 FPS avec Delta Compression (OPTIMISÉ avec NetworkManager)
+// ULTRA-SMOOTH: 200 FPS server tick rate for maximum responsiveness
 let gameLoopTimer = setInterval(() => {
   gameLoop();
 
   // Émettre l'état du jeu (delta compression automatique)
   networkManager.emitGameState();
-}, 1000 / 30);
+}, 1000 / 200);
 
 // Vérification périodique de l'inactivité des joueurs
 let heartbeatTimer = setInterval(() => {
