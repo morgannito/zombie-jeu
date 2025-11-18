@@ -200,8 +200,13 @@ class AudioManager {
     if (!this.enabled || !this.audioContext) return;
 
     // Resume audio context if needed (for mobile auto-play restrictions)
+    // CORRECTION: Ne pas bloquer après resume() car c'est async
+    // Le contexte va se résumer automatiquement et les sons suivants fonctionneront
     if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+      this.audioContext.resume().catch(e => {
+        console.warn('Failed to resume audio context:', e);
+      });
+      // Continue quand même - le premier son peut ne pas jouer, mais ça débloque le contexte
     }
 
     const now = this.audioContext.currentTime;
@@ -3703,6 +3708,12 @@ class GameEngine {
       this.canvas.removeEventListener('click', this.handlers.click);
     }
 
+    // CORRECTION: Fermer la connexion socket proprement
+    if (window.socket && typeof window.socket.close === 'function') {
+      console.log('[CLEANUP] Closing socket connection');
+      window.socket.close();
+    }
+
     // Cleanup all managers
     if (window.inputManager && typeof window.inputManager.cleanup === 'function') {
       window.inputManager.cleanup();
@@ -3719,6 +3730,8 @@ class GameEngine {
     if (this.mobileControls && typeof this.mobileControls.cleanup === 'function') {
       this.mobileControls.cleanup();
     }
+
+    console.log('[CLEANUP] Game cleanup completed');
   }
 }
 
