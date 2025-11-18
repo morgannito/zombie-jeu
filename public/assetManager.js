@@ -132,10 +132,41 @@ class AssetManager {
     }
 
     /**
+     * Charge le manifest des assets disponibles
+     */
+    async loadManifest() {
+        try {
+            const response = await fetch('assets/manifest.json');
+            if (!response.ok) {
+                console.log('ℹ️ Aucun manifest d\'assets trouvé - utilisation du rendu procédural uniquement');
+                return null;
+            }
+            const manifest = await response.json();
+            if (!manifest.enabled) {
+                console.log('ℹ️ Assets désactivés dans le manifest - utilisation du rendu procédural');
+                return null;
+            }
+            return manifest;
+        } catch (err) {
+            console.log('ℹ️ Erreur lors du chargement du manifest - utilisation du rendu procédural');
+            return null;
+        }
+    }
+
+    /**
      * Charge tous les assets du jeu
      */
     async loadAllAssets() {
         console.log('🎮 Chargement des assets...');
+
+        // Charger d'abord le manifest pour savoir quels assets sont disponibles
+        const manifest = await this.loadManifest();
+        if (!manifest || !manifest.assets) {
+            console.log('✅ Mode rendu procédural activé (aucun asset externe)');
+            this.loaded = true;
+            return true;
+        }
+
         this.loadingPromises = [];
 
         // Charger les backgrounds
