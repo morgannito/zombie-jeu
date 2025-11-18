@@ -10,11 +10,16 @@
 
   console.log('Applying game patches for enhanced systems...');
 
-  // Attendre que le jeu soit initialisé
+  // Attendre que le jeu soit initialisé avec timeout de sécurité
+  let patchAttempts = 0;
+  const MAX_PATCH_ATTEMPTS = 100; // 10 secondes max
   const patchInterval = setInterval(() => {
     if (window.GameEngine && window.Renderer && window.PlayerController) {
       clearInterval(patchInterval);
       applyPatches();
+    } else if (++patchAttempts >= MAX_PATCH_ATTEMPTS) {
+      clearInterval(patchInterval);
+      console.error('❌ Failed to load game systems after 10 seconds. Game may not work correctly.');
     }
   }, 100);
 
@@ -126,7 +131,11 @@
             const player = state.players[window.gameState.playerId];
             if (player) {
               window.updateHealthBar(player.health, player.maxHealth);
-              window.updateXPBar(player.xp, getXPForLevel(player.level + 1));
+              // Utiliser la fonction depuis window si disponible, sinon calculer localement
+              const nextLevelXP = window.getXPForLevel ? window.getXPForLevel(player.level + 1) : getXPForLevel(player.level + 1);
+              if (window.updateXPBar) {
+                window.updateXPBar(player.xp, nextLevelXP);
+              }
             }
           }
         });

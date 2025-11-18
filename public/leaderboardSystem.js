@@ -10,6 +10,28 @@ class LeaderboardSystem {
     this.socket = null;
   }
 
+  // ===============================================
+  // SAFE LOCALSTORAGE HELPERS
+  // ===============================================
+  _safeGetItem(key, defaultValue = null) {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn(`localStorage.getItem failed for key "${key}":`, e.message);
+      return defaultValue;
+    }
+  }
+
+  _safeSetItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      console.warn(`localStorage.setItem failed for key "${key}":`, e.message);
+      return false;
+    }
+  }
+
   // Initialiser avec socket
   initialize(socket) {
     this.socket = socket;
@@ -124,20 +146,20 @@ class LeaderboardSystem {
 
   // Sauvegarder/charger données
   saveScores() {
-    localStorage.setItem('leaderboard_scores', JSON.stringify(this.scores));
+    this._safeSetItem('leaderboard_scores', JSON.stringify(this.scores));
   }
 
   loadScores() {
-    const saved = localStorage.getItem('leaderboard_scores');
+    const saved = this._safeGetItem('leaderboard_scores');
     return saved ? JSON.parse(saved) : [];
   }
 
   savePersonalBest() {
-    localStorage.setItem('personal_best', JSON.stringify(this.personalBest));
+    this._safeSetItem('personal_best', JSON.stringify(this.personalBest));
   }
 
   loadPersonalBest() {
-    const saved = localStorage.getItem('personal_best');
+    const saved = this._safeGetItem('personal_best');
     return saved ? JSON.parse(saved) : null;
   }
 

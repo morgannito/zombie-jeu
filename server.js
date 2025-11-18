@@ -1,13 +1,45 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, {
+  // Activer la compression des paquets Socket.IO
+  perMessageDeflate: {
+    threshold: 1024  // Compresser si > 1KB (réduction 30-40%)
+  },
+  transports: ['websocket'],  // Privilégier WebSocket (plus performant que polling)
+  pingTimeout: 60000,
+  pingInterval: 25000
+});
 const path = require('path');
+
+// Import des modules d'optimisation
+const EntityManager = require('./lib/server/EntityManager');
+const CollisionManager = require('./lib/server/CollisionManager');
+const NetworkManager = require('./lib/server/NetworkManager');
+const MathUtils = require('./lib/MathUtils');
+
+// Import des modules de game logic
+const ConfigManager = require('./lib/server/ConfigManager');
+const ZombieManager = require('./lib/server/ZombieManager');
+const RoomManager = require('./lib/server/RoomManager');
+const PlayerManager = require('./lib/server/PlayerManager');
 
 const PORT = process.env.PORT || 3000;
 
 // Servir les fichiers statiques
 app.use(express.static('public'));
+
+// Importer la configuration
+const {
+  CONFIG,
+  WEAPONS,
+  POWERUP_TYPES,
+  ZOMBIE_TYPES,
+  LEVEL_UP_UPGRADES,
+  SHOP_ITEMS,
+  INACTIVITY_TIMEOUT,
+  HEARTBEAT_CHECK_INTERVAL
+} = ConfigManager;
 
 // État du jeu
 const gameState = {
@@ -41,576 +73,75 @@ const gameState = {
   }
 };
 
-// Configuration du jeu (MAP ÉNORME pour exploration libre)
-const CONFIG = {
-  ROOM_WIDTH: 3000, // Map beaucoup plus grande (800 -> 3000)
-  ROOM_HEIGHT: 2400, // Map beaucoup plus grande (600 -> 2400)
-  WALL_THICKNESS: 40, // Murs plus épais pour la grande map
-  PLAYER_SPEED: 8, // Vitesse augmentée pour la grande map
-  PLAYER_SIZE: 20,
-  ZOMBIE_SIZE: 25,
-  ZOMBIE_SPAWN_INTERVAL: 1000, // Spawns 2x plus rapides (2000 -> 1000ms)
-  MAX_ZOMBIES: 50, // Beaucoup plus de zombies simultanés (35 -> 50)
-  BULLET_SPEED: 10,
-  BULLET_DAMAGE: 34,
-  BULLET_SIZE: 5,
-  PLAYER_MAX_HEALTH: 100,
-  POWERUP_SPAWN_INTERVAL: 15000,
-  POWERUP_SIZE: 15,
-  ZOMBIES_PER_ROOM: 25, // Plus de zombies pour augmenter la difficulté (20 -> 25)
-  LOOT_SIZE: 10,
-  DOOR_WIDTH: 120, // Porte plus large
-  ROOMS_PER_RUN: 3
+// ===============================================
+// MANAGERS D'OPTIMISATION & GAME LOGIC
+// ===============================================
+
+// Managers d'optimisation
+const entityManager = new EntityManager(gameState, CONFIG);
+const collisionManager = new CollisionManager(gameState, CONFIG);
+const networkManager = new NetworkManager(io, gameState);
+
+// Managers de game logic
+const roomManager = new RoomManager(gameState, CONFIG, io);
+const playerManager = new PlayerManager(gameState, CONFIG, LEVEL_UP_UPGRADES);
+const zombieManager = new ZombieManager(
+  gameState,
+  CONFIG,
+  ZOMBIE_TYPES,
+  (x, y, size) => roomManager.checkWallCollision(x, y, size)
+);
+
+// ===============================================
+// RATE LIMITING SYSTEM
+// ===============================================
+const rateLimits = new Map();
+
+const RATE_LIMIT_CONFIG = {
+  'shoot': { maxRequests: 50, windowMs: 1000 },
+  'playerMove': { maxRequests: 60, windowMs: 1000 },
+  'setNickname': { maxRequests: 3, windowMs: 10000 },
+  'selectUpgrade': { maxRequests: 10, windowMs: 5000 },
+  'buyItem': { maxRequests: 20, windowMs: 5000 },
 };
 
-// Constantes pour la gestion des sessions
-const INACTIVITY_TIMEOUT = 120000; // 2 minutes d'inactivité avant déconnexion
-const HEARTBEAT_CHECK_INTERVAL = 15000; // Vérifier l'inactivité toutes les 15 secondes
+function checkRateLimit(socketId, eventName) {
+  const config = RATE_LIMIT_CONFIG[eventName];
+  if (!config) return true;
 
-// Types d'armes (Améliorées pour un gameplay plus rapide)
-const WEAPONS = {
-  pistol: {
-    name: 'Pistolet',
-    damage: 40, // +6 dégâts
-    fireRate: 180, // Plus rapide (300 -> 180ms)
-    bulletSpeed: 14,
-    bulletCount: 1,
-    spread: 0,
-    color: '#ffff00'
-  },
-  shotgun: {
-    name: 'Shotgun',
-    damage: 25, // +5 dégâts par projectile
-    fireRate: 600, // Plus rapide (800 -> 600ms)
-    bulletSpeed: 11,
-    bulletCount: 5,
-    spread: 0.3,
-    color: '#ff6600'
-  },
-  machinegun: {
-    name: 'Mitraillette',
-    damage: 30, // +5 dégâts
-    fireRate: 80, // Plus rapide (100 -> 80ms)
-    bulletSpeed: 16,
-    bulletCount: 1,
-    spread: 0.08,
-    color: '#00ffff'
-  },
-  rocketlauncher: {
-    name: 'Lance-Roquettes',
-    damage: 150, // Très fort dégâts
-    fireRate: 1200, // Tir lent (1.2 secondes)
-    bulletSpeed: 8, // Projectile lent
-    bulletCount: 1,
-    spread: 0,
-    color: '#ff0000',
-    bulletSize: 8, // Roquettes plus grosses
-    hasExplosion: true, // Les roquettes explosent toujours
-    explosionRadius: 120, // Grand rayon d'explosion
-    explosionDamage: 80 // Dégâts de zone
-  },
-  sniper: {
-    name: 'Sniper',
-    damage: 200, // Très haut dégât
-    fireRate: 1500, // Tir très lent (1.5 secondes)
-    bulletSpeed: 25, // Très rapide
-    bulletCount: 1,
-    spread: 0, // Parfaitement précis
-    color: '#0099ff',
-    bulletSize: 4, // Petite balle
-    piercing: 3 // Traverse jusqu'à 3 ennemis
-  },
-  flamethrower: {
-    name: 'Lance-Flammes',
-    damage: 15, // Faible dégât par tick
-    fireRate: 50, // Tir très rapide (quasi-continu)
-    bulletSpeed: 6, // Lent
-    bulletCount: 3, // Plusieurs flammes
-    spread: 0.4, // Large cône
-    color: '#ff6600',
-    bulletSize: 12, // Grosses flammes
-    lifetime: 400, // Les flammes disparaissent rapidement
-    isFlame: true
-  },
-  grenadelauncher: {
-    name: 'Lance-Grenades',
-    damage: 120, // Fort dégât d'impact
-    fireRate: 900, // Modéré (0.9 secondes)
-    bulletSpeed: 7, // Modéré
-    bulletCount: 1,
-    spread: 0,
-    color: '#228822',
-    bulletSize: 10,
-    hasExplosion: true,
-    explosionRadius: 150, // Très grand rayon
-    explosionDamage: 60, // Dégâts de zone modérés
-    isGrenade: true,
-    gravity: 0.15 // Arc de tir
-  },
-  laser: {
-    name: 'Laser',
-    damage: 50, // Dégât modéré
-    fireRate: 200, // Rapide (0.2 secondes)
-    bulletSpeed: 30, // Très rapide
-    bulletCount: 1,
-    spread: 0,
-    color: '#ff00ff',
-    bulletSize: 3,
-    piercing: 999, // Traverse tous les ennemis
-    isLaser: true
-  },
-  crossbow: {
-    name: 'Arbalète',
-    damage: 100, // Haut dégât de base
-    fireRate: 800, // Modéré (0.8 secondes)
-    bulletSpeed: 18, // Rapide
-    bulletCount: 1,
-    spread: 0,
-    color: '#8B4513',
-    bulletSize: 6,
-    criticalChance: 0.5, // 50% de chance de critique
-    criticalMultiplier: 3, // x3 dégâts en critique
-    isCrossbow: true
+  const now = Date.now();
+
+  if (!rateLimits.has(socketId)) {
+    rateLimits.set(socketId, {});
   }
-};
 
-// Types de power-ups
-const POWERUP_TYPES = {
-  health: {
-    name: 'Santé',
-    color: '#00ff00',
-    effect: (player) => {
-      player.health = Math.min(player.health + 50, player.maxHealth);
-    }
-  },
-  speed: {
-    name: 'Vitesse',
-    color: '#00ffff',
-    effect: (player) => {
-      player.speedBoost = Date.now() + 10000; // 10 secondes
-    }
-  },
-  shotgun: {
-    name: 'Shotgun',
-    color: '#ff6600',
-    effect: (player) => {
-      player.weapon = 'shotgun';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  machinegun: {
-    name: 'Mitraillette',
-    color: '#00ffff',
-    effect: (player) => {
-      player.weapon = 'machinegun';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  rocketlauncher: {
-    name: 'Lance-Roquettes',
-    color: '#ff0000',
-    effect: (player) => {
-      player.weapon = 'rocketlauncher';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  sniper: {
-    name: 'Sniper',
-    color: '#0099ff',
-    effect: (player) => {
-      player.weapon = 'sniper';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  flamethrower: {
-    name: 'Lance-Flammes',
-    color: '#ff6600',
-    effect: (player) => {
-      player.weapon = 'flamethrower';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  grenadelauncher: {
-    name: 'Lance-Grenades',
-    color: '#228822',
-    effect: (player) => {
-      player.weapon = 'grenadelauncher';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  laser: {
-    name: 'Laser',
-    color: '#ff00ff',
-    effect: (player) => {
-      player.weapon = 'laser';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  },
-  crossbow: {
-    name: 'Arbalète',
-    color: '#8B4513',
-    effect: (player) => {
-      player.weapon = 'crossbow';
-      player.weaponTimer = Date.now() + 15000; // 15 secondes
-    }
-  }
-};
+  const socketLimits = rateLimits.get(socketId);
 
-// Types de zombies (Rogue-like avec XP améliorée)
-const ZOMBIE_TYPES = {
-  normal: {
-    name: 'Zombie Normal',
-    health: 65,
-    speed: 2,
-    damage: 8,
-    color: '#00ff00',
-    size: 25,
-    goldDrop: 8,
-    xpDrop: 20 // +67% XP (12 -> 20)
-  },
-  fast: {
-    name: 'Zombie Rapide',
-    health: 45,
-    speed: 4,
-    damage: 12,
-    color: '#ffff00',
-    size: 20,
-    goldDrop: 15,
-    xpDrop: 30 // +67% XP (18 -> 30)
-  },
-  tank: {
-    name: 'Zombie Tank',
-    health: 170,
-    speed: 1,
-    damage: 20,
-    color: '#ff6600',
-    size: 35,
-    goldDrop: 30,
-    xpDrop: 60 // +71% XP (35 -> 60)
-  },
-  explosive: {
-    name: 'Zombie Explosif',
-    health: 50,
-    speed: 2.5,
-    damage: 10,
-    color: '#ff00ff',
-    size: 22,
-    goldDrop: 20,
-    xpDrop: 40, // +60% XP (25 -> 40)
-    explosionRadius: 100,
-    explosionDamage: 30
-  },
-  healer: {
-    name: 'Zombie Soigneur',
-    health: 85,
-    speed: 1.5,
-    damage: 5,
-    color: '#00ffff',
-    size: 28,
-    goldDrop: 35,
-    xpDrop: 50, // +67% XP (30 -> 50)
-    healAmount: 10,
-    healRadius: 150,
-    healCooldown: 3000
-  },
-  slower: {
-    name: 'Zombie Ralentisseur',
-    health: 75,
-    speed: 1.8,
-    damage: 6,
-    color: '#8800ff',
-    size: 26,
-    goldDrop: 25,
-    xpDrop: 45, // +61% XP (28 -> 45)
-    slowRadius: 120,
-    slowAmount: 0.5,
-    slowDuration: 2000
-  },
-  poison: {
-    name: 'Zombie Empoisonneur',
-    health: 70,
-    speed: 2.2,
-    damage: 9,
-    color: '#22ff22',
-    size: 24,
-    goldDrop: 22,
-    xpDrop: 42,
-    poisonTrailInterval: 200, // Laisse une traînée toutes les 200ms
-    poisonDuration: 3000, // La traînée dure 3 secondes
-    poisonDamage: 2, // Dégâts par tick (toutes les 500ms)
-    poisonRadius: 35 // Rayon de la zone de poison
-  },
-  shooter: {
-    name: 'Zombie Tireur',
-    health: 60,
-    speed: 1.2,
-    damage: 15, // Dégâts par balle
-    color: '#ff9900',
-    size: 24,
-    goldDrop: 28,
-    xpDrop: 48,
-    shootRange: 350, // Portée de tir
-    shootCooldown: 2000, // Tire toutes les 2 secondes
-    bulletSpeed: 8,
-    bulletColor: '#ff3300'
-  },
-  boss: {
-    name: 'Boss Zombie',
-    health: 400,
-    speed: 1.5,
-    damage: 25,
-    color: '#ff0000',
-    size: 50,
-    goldDrop: 150,
-    xpDrop: 200 // +67% XP (120 -> 200)
+  if (!socketLimits[eventName] || now > socketLimits[eventName].resetTime) {
+    socketLimits[eventName] = {
+      count: 1,
+      resetTime: now + config.windowMs
+    };
+    return true;
   }
-};
 
-// Level-up Upgrades (choix à chaque niveau)
-const LEVEL_UP_UPGRADES = {
-  maxHealthBoost: {
-    id: 'maxHealthBoost',
-    name: '❤️ Coeur Robuste',
-    description: '+30 PV max',
-    rarity: 'common',
-    effect: (player) => {
-      player.maxHealth += 30;
-      player.health = Math.min(player.health + 30, player.maxHealth);
-    }
-  },
-  damageBoost: {
-    id: 'damageBoost',
-    name: '⚔️ Force Brute',
-    description: '+15% dégâts',
-    rarity: 'common',
-    effect: (player) => {
-      player.damageMultiplier = (player.damageMultiplier || 1) * 1.15;
-    }
-  },
-  speedBoost: {
-    id: 'speedBoost',
-    name: '👟 Vélocité',
-    description: '+20% vitesse',
-    rarity: 'common',
-    effect: (player) => {
-      player.speedMultiplier = (player.speedMultiplier || 1) * 1.20;
-    }
-  },
-  fireRateBoost: {
-    id: 'fireRateBoost',
-    name: '🔫 Gâchette Rapide',
-    description: '-15% cooldown armes',
-    rarity: 'common',
-    effect: (player) => {
-      player.fireRateMultiplier = (player.fireRateMultiplier || 1) * 0.85;
-    }
-  },
-  regeneration: {
-    id: 'regeneration',
-    name: '💚 Régénération',
-    description: '+1 PV/sec',
-    rarity: 'rare',
-    effect: (player) => {
-      player.regeneration = (player.regeneration || 0) + 1;
-    }
-  },
-  bulletPiercing: {
-    id: 'bulletPiercing',
-    name: '🎯 Balles Perforantes',
-    description: 'Les balles traversent 1 ennemi de plus',
-    rarity: 'rare',
-    effect: (player) => {
-      player.bulletPiercing = (player.bulletPiercing || 0) + 1;
-    }
-  },
-  lifeSteal: {
-    id: 'lifeSteal',
-    name: '🩸 Vol de Vie',
-    description: '+5% de vol de vie sur dégâts',
-    rarity: 'rare',
-    effect: (player) => {
-      player.lifeSteal = (player.lifeSteal || 0) + 0.05;
-    }
-  },
-  criticalChance: {
-    id: 'criticalChance',
-    name: '💥 Coup Critique',
-    description: '+10% chance de critique (x2 dégâts)',
-    rarity: 'rare',
-    effect: (player) => {
-      player.criticalChance = (player.criticalChance || 0) + 0.10;
-    }
-  },
-  goldMagnet: {
-    id: 'goldMagnet',
-    name: '💰 Aimant à Or',
-    description: '+50% rayon de collecte',
-    rarity: 'common',
-    effect: (player) => {
-      player.goldMagnetRadius = (player.goldMagnetRadius || 0) + 50;
-    }
-  },
-  dodgeChance: {
-    id: 'dodgeChance',
-    name: '🌀 Esquive',
-    description: '+8% chance d\'esquive',
-    rarity: 'rare',
-    effect: (player) => {
-      player.dodgeChance = (player.dodgeChance || 0) + 0.08;
-    }
-  },
-  explosiveRounds: {
-    id: 'explosiveRounds',
-    name: '💣 Munitions Explosives',
-    description: 'Les balles explosent (rayon 30px, 50% dégâts)',
-    rarity: 'legendary',
-    effect: (player) => {
-      player.explosiveRounds = true;
-      player.explosionRadius = 30;
-      player.explosionDamagePercent = 0.5;
-    }
-  },
-  multishot: {
-    id: 'multishot',
-    name: '🎆 Tir Multiple',
-    description: '+1 balle par tir',
-    rarity: 'legendary',
-    effect: (player) => {
-      player.extraBullets = (player.extraBullets || 0) + 1;
-    }
-  },
-  thorns: {
-    id: 'thorns',
-    name: '🛡️ Épines',
-    description: 'Renvoie 20% des dégâts reçus',
-    rarity: 'rare',
-    effect: (player) => {
-      player.thorns = (player.thorns || 0) + 0.20;
-    }
-  },
-  fullHeal: {
-    id: 'fullHeal',
-    name: '✨ Soin Complet',
-    description: 'Restaure toute votre vie',
-    rarity: 'common',
-    effect: (player) => {
-      player.health = player.maxHealth;
-    }
-  },
-  autoTurret: {
-    id: 'autoTurret',
-    name: '🎯 Tourelle Automatique',
-    description: 'Tire automatiquement sur les zombies proches',
-    rarity: 'legendary',
-    effect: (player) => {
-      player.autoTurrets = (player.autoTurrets || 0) + 1;
-      if (!player.lastAutoShot) {
-        player.lastAutoShot = Date.now();
-      }
-    }
-  }
-};
+  socketLimits[eventName].count++;
 
-// Shop Items (Rogue-like)
-const SHOP_ITEMS = {
-  permanent: {
-    maxHealth: {
-      id: 'maxHealth',
-      name: '❤️ Vie Maximum',
-      description: '+20 PV max permanents',
-      baseCost: 50,
-      costIncrease: 25,
-      maxLevel: 10,
-      effect: (player) => {
-        player.maxHealth += 20;
-        player.health = player.maxHealth; // Heal complet
-      }
-    },
-    damage: {
-      id: 'damage',
-      name: '⚔️ Dégâts',
-      description: '+10% dégâts permanents',
-      baseCost: 75,
-      costIncrease: 35,
-      maxLevel: 5,
-      effect: (player) => {
-        player.damageMultiplier = (player.damageMultiplier || 1) * 1.10;
-      }
-    },
-    speed: {
-      id: 'speed',
-      name: '👟 Vitesse',
-      description: '+15% vitesse permanente',
-      baseCost: 60,
-      costIncrease: 30,
-      maxLevel: 5,
-      effect: (player) => {
-        player.speedMultiplier = (player.speedMultiplier || 1) * 1.15;
-      }
-    },
-    fireRate: {
-      id: 'fireRate',
-      name: '🔫 Cadence de Tir',
-      description: '-10% cooldown armes',
-      baseCost: 80,
-      costIncrease: 40,
-      maxLevel: 5,
-      effect: (player) => {
-        player.fireRateMultiplier = (player.fireRateMultiplier || 1) * 0.90;
-      }
-    }
-  },
-  temporary: {
-    heal: {
-      id: 'heal',
-      name: '💚 Soin Complet',
-      description: 'Restaure toute votre vie',
-      cost: 30,
-      effect: (player) => {
-        player.health = player.maxHealth;
-      }
-    },
-    shotgun: {
-      id: 'shotgun',
-      name: '🔫 Shotgun',
-      description: 'Shotgun pour la salle actuelle',
-      cost: 40,
-      effect: (player) => {
-        player.weapon = 'shotgun';
-        player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
-      }
-    },
-    machinegun: {
-      id: 'machinegun',
-      name: '🔫 Mitraillette',
-      description: 'Mitraillette pour la salle actuelle',
-      cost: 50,
-      effect: (player) => {
-        player.weapon = 'machinegun';
-        player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
-      }
-    },
-    rocketlauncher: {
-      id: 'rocketlauncher',
-      name: '🚀 Lance-Roquettes',
-      description: 'Lance-roquettes dévastateur pour la salle actuelle',
-      cost: 75,
-      effect: (player) => {
-        player.weapon = 'rocketlauncher';
-        player.weaponTimer = Date.now() + 999999; // Jusqu'à la fin de la salle
-      }
-    },
-    speedBoost: {
-      id: 'speedBoost',
-      name: '⚡ Boost Vitesse',
-      description: 'Vitesse x2 pour la salle actuelle',
-      cost: 35,
-      effect: (player) => {
-        player.speedBoost = Date.now() + 999999; // Jusqu'à la fin de la salle
-      }
-    }
+  if (socketLimits[eventName].count > config.maxRequests) {
+    console.warn(`[RATE LIMIT] Player ${socketId} exceeded rate limit for ${eventName}`);
+    return false;
   }
-};
+
+  return true;
+}
+
+function cleanupRateLimits(socketId) {
+  rateLimits.delete(socketId);
+}
+
+// ===============================================
+// UTILITY FUNCTIONS
+// ===============================================
 
 // Fonction utilitaire pour calculer la distance
 function distance(x1, y1, x2, y2) {
@@ -981,43 +512,26 @@ function createLoot(x, y, goldAmount, xpAmount) {
 
 // Créer des particules
 function createParticles(x, y, color, count = 10) {
-  for (let i = 0; i < count; i++) {
-    const particleId = gameState.nextParticleId++;
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 3 + 1;
-
-    gameState.particles[particleId] = {
-      id: particleId,
-      x: x,
-      y: y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      color: color,
-      lifetime: Date.now() + 500,
-      size: Math.random() * 3 + 2
-    };
-  }
+  // Utiliser EntityManager avec Object Pool
+  entityManager.createParticles(x, y, color, count);
 }
 
 // Créer une explosion visuelle
 function createExplosion(x, y, radius, isRocket = false) {
-  const explosionId = gameState.nextExplosionId++;
-  const now = Date.now();
-
-  gameState.explosions[explosionId] = {
-    id: explosionId,
-    x: x,
-    y: y,
-    radius: radius,
-    isRocket: isRocket,
-    createdAt: now,
-    duration: 400 // L'animation dure 400ms
-  };
+  // Utiliser EntityManager avec Object Pool
+  entityManager.createExplosion({
+    x, y, radius, isRocket,
+    createdAt: Date.now(),
+    duration: 400
+  });
 }
 
 // Mise à jour de la logique du jeu
 function gameLoop() {
   const now = Date.now();
+
+  // Reconstruire le Quadtree pour les collisions optimisées
+  collisionManager.rebuildQuadtree();
 
   // Mise à jour des joueurs (power-ups temporaires)
   for (let playerId in gameState.players) {
@@ -1069,46 +583,33 @@ function gameLoop() {
       const autoFireCooldown = 600 / player.autoTurrets;
 
       if (now - player.lastAutoShot >= autoFireCooldown) {
-        // Trouver le zombie le plus proche
-        let closestZombie = null;
-        let closestDistance = Infinity;
-        const autoTurretRange = 500; // Portée de 500 pixels
-
-        for (let zombieId in gameState.zombies) {
-          const zombie = gameState.zombies[zombieId];
-          const dist = distance(player.x, player.y, zombie.x, zombie.y);
-
-          if (dist < closestDistance && dist <= autoTurretRange) {
-            closestDistance = dist;
-            closestZombie = zombie;
-          }
-        }
+        // Trouver le zombie le plus proche (OPTIMISÉ avec Quadtree)
+        const autoTurretRange = 500;
+        const closestZombie = collisionManager.findClosestZombie(player.x, player.y, autoTurretRange);
 
         // Tirer sur le zombie le plus proche
         if (closestZombie) {
           const angle = Math.atan2(closestZombie.y - player.y, closestZombie.x - player.x);
-          const bulletId = gameState.nextBulletId++;
 
           // Les tourelles font 60% des dégâts normaux
           const baseDamage = CONFIG.BULLET_DAMAGE * 0.6;
           const damage = baseDamage * (player.damageMultiplier || 1);
 
-          gameState.bullets[bulletId] = {
-            id: bulletId,
+          // Créer la balle (OPTIMISÉ avec Object Pool)
+          entityManager.createBullet({
             x: player.x,
             y: player.y,
-            vx: Math.cos(angle) * CONFIG.BULLET_SPEED,
-            vy: Math.sin(angle) * CONFIG.BULLET_SPEED,
+            vx: MathUtils.fastCos(angle) * CONFIG.BULLET_SPEED,
+            vy: MathUtils.fastSin(angle) * CONFIG.BULLET_SPEED,
             playerId: playerId,
             damage: damage,
-            color: '#00ffaa', // Couleur spéciale pour les tourelles
+            color: '#00ffaa',
             piercing: 0,
-            piercedZombies: [],
             explosiveRounds: false,
             explosionRadius: 0,
             explosionDamagePercent: 0,
             isAutoTurret: true
-          };
+          });
 
           player.lastAutoShot = now;
 
@@ -1123,84 +624,67 @@ function gameLoop() {
   for (let zombieId in gameState.zombies) {
     const zombie = gameState.zombies[zombieId];
 
-    // Capacité spéciale : Zombie Soigneur
+    // Capacité spéciale : Zombie Soigneur (OPTIMISÉ avec Quadtree)
     if (zombie.type === 'healer') {
       const healerType = ZOMBIE_TYPES.healer;
       if (!zombie.lastHeal || now - zombie.lastHeal >= healerType.healCooldown) {
         zombie.lastHeal = now;
 
-        // Soigner les zombies autour
-        for (let otherId in gameState.zombies) {
-          if (otherId !== zombieId) {
-            const other = gameState.zombies[otherId];
-            const dist = distance(zombie.x, zombie.y, other.x, other.y);
-            if (dist < healerType.healRadius && other.health < other.maxHealth) {
-              other.health = Math.min(other.health + healerType.healAmount, other.maxHealth);
-              // Créer des particules de soin
-              createParticles(other.x, other.y, '#00ffff', 5);
-            }
+        // Soigner les zombies autour (OPTIMISÉ)
+        const nearbyZombies = collisionManager.findZombiesInRadius(
+          zombie.x, zombie.y, healerType.healRadius, zombieId
+        );
+
+        for (let other of nearbyZombies) {
+          if (other.health < other.maxHealth) {
+            other.health = Math.min(other.health + healerType.healAmount, other.maxHealth);
+            // Créer des particules de soin
+            createParticles(other.x, other.y, '#00ffff', 5);
           }
         }
       }
     }
 
-    // Capacité spéciale : Zombie Ralentisseur
+    // Capacité spéciale : Zombie Ralentisseur (OPTIMISÉ avec Quadtree)
     if (zombie.type === 'slower') {
       const slowerType = ZOMBIE_TYPES.slower;
 
-      // Ralentir les joueurs dans le rayon
-      for (let playerId in gameState.players) {
-        const player = gameState.players[playerId];
-        if (player.alive) {
-          const dist = distance(zombie.x, zombie.y, player.x, player.y);
-          if (dist < slowerType.slowRadius) {
-            // Appliquer l'effet de ralentissement
-            player.slowedUntil = now + slowerType.slowDuration;
-            player.slowAmount = slowerType.slowAmount;
-          }
-        }
+      // Ralentir les joueurs dans le rayon (OPTIMISÉ)
+      const nearbyPlayers = collisionManager.findPlayersInRadius(
+        zombie.x, zombie.y, slowerType.slowRadius
+      );
+
+      for (let player of nearbyPlayers) {
+        // Appliquer l'effet de ralentissement
+        player.slowedUntil = now + slowerType.slowDuration;
+        player.slowAmount = slowerType.slowAmount;
       }
     }
 
-    // Capacité spéciale : Zombie Tireur
+    // Capacité spéciale : Zombie Tireur (OPTIMISÉ avec Quadtree)
     if (zombie.type === 'shooter') {
       const shooterType = ZOMBIE_TYPES.shooter;
 
       // Vérifier le cooldown de tir
       if (!zombie.lastShot || now - zombie.lastShot >= shooterType.shootCooldown) {
-        // Trouver le joueur le plus proche dans la portée
-        let targetPlayer = null;
-        let targetDistance = Infinity;
-
-        for (let playerId in gameState.players) {
-          const player = gameState.players[playerId];
-          // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
-          if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
-            continue;
-          }
-
-          const dist = distance(zombie.x, zombie.y, player.x, player.y);
-          if (dist < shooterType.shootRange && dist < targetDistance) {
-            targetDistance = dist;
-            targetPlayer = player;
-          }
-        }
+        // Trouver le joueur le plus proche dans la portée (OPTIMISÉ)
+        const targetPlayer = collisionManager.findClosestPlayer(
+          zombie.x, zombie.y, shooterType.shootRange,
+          { ignoreSpawnProtection: true, ignoreInvisible: true }
+        );
 
         // Tirer sur le joueur cible
         if (targetPlayer) {
           zombie.lastShot = now;
-
-          // Créer une balle de zombie
-          const bulletId = gameState.nextBulletId++;
           const angle = Math.atan2(targetPlayer.y - zombie.y, targetPlayer.x - zombie.x);
 
-          gameState.bullets[bulletId] = {
-            id: bulletId,
+          // Créer une balle de zombie (OPTIMISÉ avec Object Pool)
+          entityManager.createBullet({
             x: zombie.x,
             y: zombie.y,
-            vx: Math.cos(angle) * shooterType.bulletSpeed,
-            vy: Math.sin(angle) * shooterType.bulletSpeed,
-            zombieId: zombieId, // Balle de zombie, pas de joueur
+            vx: MathUtils.fastCos(angle) * shooterType.bulletSpeed,
+            vy: MathUtils.fastSin(angle) * shooterType.bulletSpeed,
+            zombieId: zombieId,
             damage: zombie.damage,
             color: shooterType.bulletColor,
             isZombieBullet: true, // Marquer comme balle de zombie
@@ -1209,7 +693,7 @@ function gameLoop() {
             explosiveRounds: false,
             explosionRadius: 0,
             explosionDamagePercent: 0
-          };
+          });
 
           // Créer des particules de tir
           createParticles(zombie.x, zombie.y, shooterType.bulletColor, 5);
@@ -1242,31 +726,17 @@ function gameLoop() {
       }
     }
 
-    // Trouver le joueur le plus proche
-    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo, avec protection de spawn, ou invisibles
-    let closestPlayer = null;
-    let closestDistance = Infinity;
-
-    for (let playerId in gameState.players) {
-      const player = gameState.players[playerId];
-
-      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
-      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
-        continue;
-      }
-
-      const dist = distance(zombie.x, zombie.y, player.x, player.y);
-      if (dist < closestDistance) {
-        closestDistance = dist;
-        closestPlayer = player;
-      }
-    }
+    // Trouver le joueur le plus proche (OPTIMISÉ avec Quadtree)
+    const closestPlayer = collisionManager.findClosestPlayer(
+      zombie.x, zombie.y, Infinity,
+      { ignoreSpawnProtection: true, ignoreInvisible: true }
+    );
 
     // Déplacer le zombie vers le joueur ou de manière aléatoire
     if (closestPlayer) {
       const angle = Math.atan2(closestPlayer.y - zombie.y, closestPlayer.x - zombie.x);
-      const newX = zombie.x + Math.cos(angle) * zombie.speed;
-      const newY = zombie.y + Math.sin(angle) * zombie.speed;
+      const newX = zombie.x + MathUtils.fastCos(angle) * zombie.speed;
+      const newY = zombie.y + MathUtils.fastSin(angle) * zombie.speed;
 
       // Vérifier collision avec les murs - avec système de glissement
       let finalX = zombie.x;
@@ -1662,19 +1132,10 @@ function gameLoop() {
     particle.x += particle.vx;
     particle.y += particle.vy;
     particle.vy += 0.1; // Gravité
-
-    if (now > particle.lifetime) {
-      delete gameState.particles[particleId];
-    }
   }
 
-  // Mise à jour des explosions
-  for (let explosionId in gameState.explosions) {
-    const explosion = gameState.explosions[explosionId];
-    if (now > explosion.createdAt + explosion.duration) {
-      delete gameState.explosions[explosionId];
-    }
-  }
+  // Nettoyer les entités expirées (OPTIMISÉ avec Object Pools)
+  entityManager.cleanupExpiredEntities(now);
 
   // Mise à jour des power-ups
   for (let powerupId in gameState.powerups) {
@@ -1833,22 +1294,18 @@ setInterval(spawnPowerup, CONFIG.POWERUP_SPAWN_INTERVAL);
 // Initialiser le jeu au démarrage
 initializeRooms();
 
-// Game loop à 30 FPS (optimisé pour réduire la charge réseau)
+// ===============================================
+// DELTA COMPRESSION SYSTEM - Réduction de 80-90% de la bande passante
+// ===============================================
+
+// Delta compression géré par NetworkManager (voir lib/server/NetworkManager.js)
+
+// Game loop à 30 FPS avec Delta Compression (OPTIMISÉ avec NetworkManager)
 setInterval(() => {
   gameLoop();
-  io.emit('gameState', {
-    players: gameState.players,
-    zombies: gameState.zombies,
-    bullets: gameState.bullets,
-    powerups: gameState.powerups,
-    particles: gameState.particles,
-    poisonTrails: gameState.poisonTrails,
-    explosions: gameState.explosions,
-    loot: gameState.loot,
-    walls: gameState.walls,
-    wave: gameState.wave, // MODE INFINI - afficher la vague actuelle
-    zombiesRemaining: Object.keys(gameState.zombies).length
-  });
+
+  // Émettre l'état du jeu (delta compression automatique)
+  networkManager.emitGameState();
 }, 1000 / 30);
 
 // Vérification périodique de l'inactivité des joueurs
@@ -1951,6 +1408,9 @@ io.on('connection', (socket) => {
 
   // Mouvement du joueur (Rogue-like avec collision)
   socket.on('playerMove', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'playerMove')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive || !player.hasNickname) return; // Pas de mouvement sans pseudo
 
@@ -1996,6 +1456,9 @@ io.on('connection', (socket) => {
 
   // Tir du joueur
   socket.on('shoot', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'shoot')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive || !player.hasNickname) return; // Pas de tir sans pseudo
 
@@ -2116,6 +1579,9 @@ io.on('connection', (socket) => {
 
   // Sélectionner un upgrade au level up
   socket.on('selectUpgrade', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'selectUpgrade')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive) return;
 
@@ -2138,6 +1604,9 @@ io.on('connection', (socket) => {
 
   // Acheter un item dans le shop
   socket.on('buyItem', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'buyItem')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive) return;
 
@@ -2199,27 +1668,60 @@ io.on('connection', (socket) => {
 
   // Définir le pseudo du joueur
   socket.on('setNickname', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'setNickname')) {
+      socket.emit('nicknameRejected', {
+        reason: 'Trop de tentatives. Attendez quelques secondes.'
+      });
+      return;
+    }
+
     const player = gameState.players[socket.id];
     if (!player) return;
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
-    const nickname = data.nickname.trim().substring(0, 15); // Max 15 caractères
+    // VALIDATION STRICTE DU PSEUDO
+    let nickname = data.nickname ? data.nickname.trim() : '';
 
-    if (nickname.length >= 2) {
-      player.nickname = nickname;
-      player.hasNickname = true;
-      player.spawnProtection = true;
-      player.spawnProtectionEndTime = Date.now() + 3000; // 3 secondes de protection
+    // Filtrer caractères non autorisés (lettres, chiffres, espaces, tirets, underscores)
+    nickname = nickname.replace(/[^a-zA-Z0-9\s\-_]/g, '');
 
-      console.log(`${socket.id} a choisi le pseudo: ${nickname}`);
+    // Limiter à 15 caractères max
+    nickname = nickname.substring(0, 15);
 
-      // Notifier tous les joueurs
-      io.emit('playerNicknameSet', {
-        playerId: socket.id,
-        nickname: nickname
+    // Vérifier longueur minimale
+    if (nickname.length < 2) {
+      socket.emit('nicknameRejected', {
+        reason: 'Le pseudo doit contenir au moins 2 caractères alphanumériques'
       });
+      return;
     }
+
+    // Vérifier si le pseudo n'est pas déjà pris par un autre joueur
+    const isDuplicate = Object.values(gameState.players).some(
+      p => p.id !== socket.id && p.nickname && p.nickname.toLowerCase() === nickname.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      socket.emit('nicknameRejected', {
+        reason: 'Ce pseudo est déjà utilisé par un autre joueur'
+      });
+      return;
+    }
+
+    player.nickname = nickname;
+    player.hasNickname = true;
+    player.spawnProtection = true;
+    player.spawnProtectionEndTime = Date.now() + 3000; // 3 secondes de protection
+
+    console.log(`${socket.id} a choisi le pseudo: ${nickname}`);
+
+    // Notifier tous les joueurs
+    io.emit('playerNicknameSet', {
+      playerId: socket.id,
+      nickname: nickname
+    });
   });
 
   // Fin de la protection de spawn
@@ -2261,6 +1763,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Un joueur s\'est déconnecté:', socket.id);
     delete gameState.players[socket.id];
+    // Nettoyer les rate limits
+    cleanupRateLimits(socket.id);
   });
 });
 

@@ -435,12 +435,22 @@ class AchievementSystem {
     document.body.appendChild(popup);
 
     // Animation d'entrée
-    setTimeout(() => popup.classList.add('show'), 100);
-
-    // Retirer après 6 secondes
     setTimeout(() => {
-      popup.classList.remove('show');
-      setTimeout(() => popup.remove(), 500);
+      if (popup && popup.parentNode) {
+        popup.classList.add('show');
+      }
+    }, 100);
+
+    // Retirer après 6 secondes (avec vérification de sécurité)
+    setTimeout(() => {
+      if (popup && popup.parentNode) {
+        popup.classList.remove('show');
+        setTimeout(() => {
+          if (popup && popup.parentNode) {
+            popup.remove();
+          }
+        }, 500);
+      }
     }, 6000);
   }
 

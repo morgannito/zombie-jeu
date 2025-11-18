@@ -12,6 +12,19 @@ class EventSystem {
     this.checkActiveEvents();
   }
 
+  // Helper pour créer des dates dynamiques basées sur l'année en cours
+  _createSeasonalDate(month, day) {
+    const currentYear = new Date().getFullYear();
+    const currentDate = new Date();
+    const eventDate = new Date(currentYear, month - 1, day); // month is 0-indexed
+
+    // Si l'événement est déjà passé cette année, utiliser l'année prochaine
+    if (eventDate < currentDate) {
+      return new Date(currentYear + 1, month - 1, day);
+    }
+    return eventDate;
+  }
+
   // Initialiser les événements disponibles
   initializeEvents() {
     return {
@@ -95,8 +108,8 @@ class EventSystem {
         id: 'halloween',
         name: '🎃 Halloween Event',
         description: 'Zombies spéciaux et skins exclusifs!',
-        startDate: new Date('2024-10-25'),
-        endDate: new Date('2024-11-01'),
+        startDate: this._createSeasonalDate(10, 25), // 25 octobre
+        endDate: this._createSeasonalDate(11, 1),    // 1er novembre
         duration: 'seasonal',
         effects: {
           specialZombies: true,
@@ -115,8 +128,8 @@ class EventSystem {
         id: 'christmas',
         name: '🎄 Winter Wonderland',
         description: 'Événement de Noël avec cadeaux!',
-        startDate: new Date('2024-12-20'),
-        endDate: new Date('2024-12-26'),
+        startDate: this._createSeasonalDate(12, 20), // 20 décembre
+        endDate: this._createSeasonalDate(12, 26),   // 26 décembre
         duration: 'seasonal',
         effects: {
           decorations: 'christmas',
@@ -135,8 +148,8 @@ class EventSystem {
         id: 'new_year',
         name: '🎆 New Year Celebration',
         description: 'Commencez l\'année en beauté!',
-        startDate: new Date('2024-12-31'),
-        endDate: new Date('2025-01-02'),
+        startDate: this._createSeasonalDate(12, 31), // 31 décembre
+        endDate: this._createSeasonalDate(1, 2),      // 2 janvier
         duration: 'seasonal',
         effects: {
           fireworks: true,

@@ -30,8 +30,8 @@ class ParticleSystem {
       this.particles.push({
         x,
         y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
+        vx: MathUtils.fastCos(angle) * speed,
+        vy: MathUtils.fastSin(angle) * speed,
         size: size + Math.random() * 2,
         color,
         life: 1,
@@ -59,8 +59,8 @@ class ParticleSystem {
       this.particles.push({
         x,
         y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
+        vx: MathUtils.fastCos(angle) * speed,
+        vy: MathUtils.fastSin(angle) * speed,
         size: 2 + Math.random() * 3,
         color,
         life: 1,
@@ -106,8 +106,8 @@ class ParticleSystem {
       this.particles.push({
         x,
         y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
+        vx: MathUtils.fastCos(angle) * speed,
+        vy: MathUtils.fastSin(angle) * speed,
         size: 1 + Math.random() * 2,
         color: `hsl(${45 + Math.random() * 30}, 100%, 60%)`, // Jaune/orange
         life: 1,
@@ -150,8 +150,8 @@ class ParticleSystem {
     for (let i = 0; i < maxToCreate; i++) {
       const angle = (Math.PI * 2 * i) / maxToCreate;
       this.particles.push({
-        x: x + Math.cos(angle) * radius,
-        y: y + Math.sin(angle) * radius,
+        x: x + MathUtils.fastCos(angle) * radius,
+        y: y + MathUtils.fastSin(angle) * radius,
         vx: 0,
         vy: -0.5 - Math.random() * 0.5,
         size: 3,
