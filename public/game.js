@@ -1872,6 +1872,11 @@ class PlayerController {
     this.nickname = null;
     this.gameStarted = false;
     this.spawnProtectionEndTime = 0;
+
+    // OPTIMIZATION: Throttle playerMove to match server tick rate (30 FPS)
+    // Reduces bandwidth and prevents micro-desyncs causing stuttering
+    this.lastNetworkUpdate = 0;
+    this.networkUpdateInterval = 1000 / 30; // 33ms = 30 FPS to match server
   }
 
   setNickname(nickname) {
@@ -1986,13 +1991,17 @@ class PlayerController {
 
       // Update player position only if it changed
       if (finalX !== player.x || finalY !== player.y) {
-        // Client-side prediction
+        // Client-side prediction (always update immediately for smooth visuals)
         player.x = finalX;
         player.y = finalY;
         player.angle = angle;
 
-        // Send to server
-        this.network.playerMove(finalX, finalY, angle);
+        // OPTIMIZATION: Throttle network updates to match server tick rate (30 FPS)
+        // This reduces bandwidth and prevents micro-desyncs
+        if (now - this.lastNetworkUpdate >= this.networkUpdateInterval) {
+          this.network.playerMove(finalX, finalY, angle);
+          this.lastNetworkUpdate = now;
+        }
       } else {
         // Position didn't change, but update angle
         player.angle = angle;
