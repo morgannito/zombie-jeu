@@ -963,6 +963,91 @@ class ComboSystem {
 }
 
 /* ============================================
+   TOAST NOTIFICATION SYSTEM
+   ============================================ */
+
+class ToastManager {
+  constructor() {
+    this.container = document.getElementById('toast-container');
+    this.toasts = [];
+  }
+
+  show(options) {
+    const {
+      title = '',
+      message = '',
+      type = 'info', // success, info, warning, error
+      icon = this.getDefaultIcon(type),
+      duration = 3000
+    } = options;
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+      <div class="toast-icon">${icon}</div>
+      <div class="toast-content">
+        ${title ? `<div class="toast-title">${title}</div>` : ''}
+        <div class="toast-message">${message}</div>
+      </div>
+    `;
+
+    // Add to container
+    this.container.appendChild(toast);
+    this.toasts.push(toast);
+
+    // Auto remove after duration
+    if (duration > 0) {
+      setTimeout(() => {
+        this.remove(toast);
+      }, duration);
+    }
+
+    return toast;
+  }
+
+  remove(toast) {
+    toast.classList.add('removing');
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+      this.toasts = this.toasts.filter(t => t !== toast);
+    }, 300); // Match animation duration
+  }
+
+  getDefaultIcon(type) {
+    const icons = {
+      success: '✅',
+      info: 'ℹ️',
+      warning: '⚠️',
+      error: '❌'
+    };
+    return icons[type] || icons.info;
+  }
+
+  success(message, title) {
+    return this.show({ title, message, type: 'success' });
+  }
+
+  info(message, title) {
+    return this.show({ title, message, type: 'info' });
+  }
+
+  warning(message, title) {
+    return this.show({ title, message, type: 'warning' });
+  }
+
+  error(message, title) {
+    return this.show({ title, message, type: 'error' });
+  }
+
+  clear() {
+    this.toasts.forEach(toast => this.remove(toast));
+  }
+}
+
+/* ============================================
    LEADERBOARD SYSTEM
    ============================================ */
 
@@ -2824,16 +2909,32 @@ class UIManager {
 
     // Health bar
     const healthPercent = (player.health / player.maxHealth) * 100;
+    const healthBar = document.getElementById('health-bar');
     document.getElementById('health-fill').style.width = healthPercent + '%';
     document.getElementById('health-text').textContent = Math.max(0, Math.round(player.health));
+
+    // Low health warning (< 30%)
+    if (healthPercent < 30) {
+      healthBar.classList.add('low-health');
+    } else {
+      healthBar.classList.remove('low-health');
+    }
 
     // XP and level
     if (player.level && player.xp !== undefined) {
       const xpNeeded = this.getXPForLevel(player.level);
       const xpPercent = (player.xp / xpNeeded) * 100;
+      const xpBar = document.getElementById('xp-bar');
       document.getElementById('xp-fill').style.width = xpPercent + '%';
       document.getElementById('level-text').textContent = player.level;
       document.getElementById('xp-text').textContent = `${Math.floor(player.xp)}/${xpNeeded}`;
+
+      // Near level up indicator (> 85%)
+      if (xpPercent > 85) {
+        xpBar.classList.add('near-levelup');
+      } else {
+        xpBar.classList.remove('near-levelup');
+      }
     }
 
     // Stats
@@ -2844,8 +2945,10 @@ class UIManager {
     // Game over
     if (!player.alive) {
       document.getElementById('game-over').style.display = 'block';
-      document.getElementById('final-score').textContent = player.totalScore || player.score || 0;
+      document.getElementById('final-score').textContent = (player.totalScore || player.score || 0).toLocaleString();
       document.getElementById('final-wave').textContent = `${this.gameState.state.wave || 1}`;
+      document.getElementById('final-level').textContent = player.level || 1;
+      document.getElementById('final-gold').textContent = (player.gold || 0).toLocaleString();
 
       // Sauvegarder dans le leaderboard (une seule fois)
       if (!this.deathRecorded && window.leaderboardSystem) {
@@ -3438,6 +3541,7 @@ class GameEngine {
     window.audioManager = new AudioManager(); // Audio feedback
     window.comboSystem = new ComboSystem(); // Système de combos
     window.leaderboardSystem = new LeaderboardSystem(); // Système de classement
+    window.toastManager = new ToastManager(); // Système de notifications
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
@@ -3599,6 +3703,36 @@ function initInstructionsToggle() {
 }
 
 /* ============================================
+   MINIMAP TOGGLE HANDLER (MOBILE)
+   ============================================ */
+
+function initMinimapToggle() {
+  const minimap = document.getElementById('minimap');
+  const minimapToggle = document.getElementById('minimap-toggle');
+
+  if (!minimap || !minimapToggle) {
+    console.warn('Minimap elements not found');
+    return;
+  }
+
+  // Check if mobile
+  const isMobile = window.innerWidth <= 768;
+
+  if (isMobile) {
+    // Start with minimap hidden on mobile
+    minimap.classList.add('hidden-mobile');
+
+    // Toggle function
+    minimapToggle.addEventListener('click', () => {
+      minimap.classList.toggle('hidden-mobile');
+      minimapToggle.classList.toggle('active');
+    });
+
+    console.log('✅ Minimap toggle initialized (mobile)');
+  }
+}
+
+/* ============================================
    GAME INITIALIZATION
    ============================================ */
 
@@ -3606,9 +3740,11 @@ function initInstructionsToggle() {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initInstructionsToggle();
+    initMinimapToggle();
     new GameEngine();
   });
 } else {
   initInstructionsToggle();
+  initMinimapToggle();
   new GameEngine();
 }
