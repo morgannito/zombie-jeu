@@ -837,7 +837,7 @@ function gameLoop() {
 
     // Nettoyer les traînées expirées (après 3 secondes)
     if (now - trail.createdAt >= trail.duration) {
-      delete gameState.poisonTrails[trailId];
+      entityManager.destroyPoisonTrail(trailId);
       continue;
     }
 
@@ -884,7 +884,7 @@ function gameLoop() {
 
     // Vérifier le lifetime pour les flammes et autres armes à durée limitée
     if (bullet.lifetime && now > bullet.lifetime) {
-      delete gameState.bullets[bulletId];
+      entityManager.destroyBullet(bulletId);
       continue;
     }
 
@@ -892,7 +892,7 @@ function gameLoop() {
     if (bullet.x < 0 || bullet.x > CONFIG.ROOM_WIDTH ||
         bullet.y < 0 || bullet.y > CONFIG.ROOM_HEIGHT ||
         checkWallCollision(bullet.x, bullet.y, CONFIG.BULLET_SIZE)) {
-      delete gameState.bullets[bulletId];
+      entityManager.destroyBullet(bulletId);
       continue;
     }
 
@@ -909,7 +909,7 @@ function gameLoop() {
         if (distance(bullet.x, bullet.y, player.x, player.y) < CONFIG.PLAYER_SIZE) {
           // Esquive
           if (Math.random() < (player.dodgeChance || 0)) {
-            delete gameState.bullets[bulletId];
+            entityManager.destroyBullet(bulletId);
             break; // Esquive réussie, balle disparaît
           }
 
@@ -924,7 +924,7 @@ function gameLoop() {
           // Créer des particules de sang
           createParticles(player.x, player.y, '#ff0000', 8);
 
-          delete gameState.bullets[bulletId];
+          entityManager.destroyBullet(bulletId);
           break;
         }
       }
@@ -956,10 +956,10 @@ function gameLoop() {
       if (bullet.piercing > 0 && bullet.piercedZombies) {
         bullet.piercedZombies.push(zombieId);
         if (bullet.piercedZombies.length > bullet.piercing) {
-          delete gameState.bullets[bulletId];
+          entityManager.destroyBullet(bulletId);
         }
       } else {
-        delete gameState.bullets[bulletId];
+        entityManager.destroyBullet(bulletId);
       }
 
       // Balles explosives
@@ -1334,7 +1334,7 @@ setInterval(() => {
       for (let bulletId in gameState.bullets) {
         const bullet = gameState.bullets[bulletId];
         if (bullet.playerId === playerId) {
-          delete gameState.bullets[bulletId];
+          entityManager.destroyBullet(bulletId);
         }
       }
 
@@ -1786,7 +1786,7 @@ io.on('connection', (socket) => {
     for (let bulletId in gameState.bullets) {
       const bullet = gameState.bullets[bulletId];
       if (bullet.playerId === socket.id) {
-        delete gameState.bullets[bulletId];
+        entityManager.destroyBullet(bulletId);
       }
     }
 
