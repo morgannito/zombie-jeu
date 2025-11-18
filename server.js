@@ -149,6 +149,16 @@ function distance(x1, y1, x2, y2) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
 
+// CORRECTION: Fonction partagée pour nettoyer les balles d'un joueur
+function cleanupPlayerBullets(playerId) {
+  for (let bulletId in gameState.bullets) {
+    const bullet = gameState.bullets[bulletId];
+    if (bullet.playerId === playerId) {
+      entityManager.destroyBullet(bulletId);
+    }
+  }
+}
+
 // Générer 3 choix d'upgrades aléatoires avec pondération par rareté
 function generateUpgradeChoices() {
   const upgradeKeys = Object.keys(LEVEL_UP_UPGRADES);
@@ -528,12 +538,26 @@ function createExplosion(x, y, radius, isRocket = false) {
   });
 }
 
+// ===============================================
+// RACE CONDITION PROTECTION
+// ===============================================
+let gameLoopRunning = false;
+
 // Mise à jour de la logique du jeu
 function gameLoop() {
-  const now = Date.now();
+  // Protection contre race conditions
+  if (gameLoopRunning) {
+    console.warn('[RACE] Game loop already running, skipping frame');
+    return;
+  }
 
-  // Reconstruire le Quadtree pour les collisions optimisées
-  collisionManager.rebuildQuadtree();
+  gameLoopRunning = true;
+
+  try {
+    const now = Date.now();
+
+    // Reconstruire le Quadtree pour les collisions optimisées
+    collisionManager.rebuildQuadtree();
 
   // Mise à jour des joueurs (power-ups temporaires)
   for (let playerId in gameState.players) {
@@ -785,18 +809,27 @@ function gameLoop() {
             continue; // Esquive réussie
           }
 
-          const damageDealt = zombie.damage * 0.016; // Dégâts par frame
-          player.health -= damageDealt;
+          // CORRECTION: Dégâts basés sur le temps plutôt que sur les frames
+          if (!player.lastDamageTime) player.lastDamageTime = {};
+          const lastDamage = player.lastDamageTime[zombieId] || 0;
+          const DAMAGE_INTERVAL = 100; // 100ms entre chaque tick de dégâts
 
-          // Épines (renvoyer des dégâts)
-          if (player.thorns > 0) {
-            const thornsDamage = damageDealt * player.thorns;
-            zombie.health -= thornsDamage;
-          }
+          if (now - lastDamage >= DAMAGE_INTERVAL) {
+            // Dégâts par seconde convertis en dégâts par tick
+            const damageDealt = zombie.damage * (DAMAGE_INTERVAL / 1000);
+            player.health -= damageDealt;
+            player.lastDamageTime[zombieId] = now;
 
-          if (player.health <= 0) {
-            player.health = 0;
-            player.alive = false;
+            // Épines (renvoyer des dégâts)
+            if (player.thorns > 0) {
+              const thornsDamage = damageDealt * player.thorns;
+              zombie.health -= thornsDamage;
+            }
+
+            if (player.health <= 0) {
+              player.health = 0;
+              player.alive = false;
+            }
           }
         }
       }
@@ -841,10 +874,13 @@ function gameLoop() {
       continue;
     }
 
-    // Appliquer les dégâts aux joueurs qui marchent sur les traînées
-    for (let playerId in gameState.players) {
-      const player = gameState.players[playerId];
+    // OPTIMISATION: Utiliser le Quadtree pour trouver les joueurs proches
+    const nearbyPlayers = collisionManager.findPlayersInRadius(
+      trail.x, trail.y, trail.radius + 10
+    );
 
+    // Appliquer les dégâts aux joueurs qui marchent sur les traînées
+    for (let player of nearbyPlayers) {
       // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
       if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
         continue;
@@ -984,8 +1020,10 @@ function gameLoop() {
             const other = gameState.zombies[otherId];
             const dist = distance(zombie.x, zombie.y, other.x, other.y);
             if (dist < bullet.explosionRadius) {
-              // Les armes avec explosion définie utilisent les dégâts fixes, sinon un pourcentage
-              const explosionDmg = bullet.rocketExplosionDamage > 0 ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
+              // CORRECTION: Vérifier null/undefined au lieu de > 0
+              const explosionDmg = (bullet.rocketExplosionDamage !== null && bullet.rocketExplosionDamage !== undefined) ?
+                bullet.rocketExplosionDamage :
+                (bullet.damage * bullet.explosionDamagePercent);
               other.health -= explosionDmg;
               // Créer des particules sur les zombies touchés
               createParticles(other.x, other.y, other.color, 8);
@@ -1268,6 +1306,11 @@ function gameLoop() {
       }
     }
   }
+  } catch (error) {
+    console.error('[GAME LOOP ERROR]', error);
+  } finally {
+    gameLoopRunning = false;
+  }
 }
 
 // Spawn automatique des zombies avec accélération progressive
@@ -1295,7 +1338,7 @@ function restartZombieSpawner() {
 startZombieSpawner();
 
 // Spawn automatique des power-ups
-setInterval(spawnPowerup, CONFIG.POWERUP_SPAWN_INTERVAL);
+let powerupSpawnTimer = setInterval(spawnPowerup, CONFIG.POWERUP_SPAWN_INTERVAL);
 
 // Initialiser le jeu au démarrage
 initializeRooms();
@@ -1307,7 +1350,7 @@ initializeRooms();
 // Delta compression géré par NetworkManager (voir lib/server/NetworkManager.js)
 
 // Game loop à 30 FPS avec Delta Compression (OPTIMISÉ avec NetworkManager)
-setInterval(() => {
+let gameLoopTimer = setInterval(() => {
   gameLoop();
 
   // Émettre l'état du jeu (delta compression automatique)
@@ -1315,7 +1358,7 @@ setInterval(() => {
 }, 1000 / 30);
 
 // Vérification périodique de l'inactivité des joueurs
-setInterval(() => {
+let heartbeatTimer = setInterval(() => {
   const now = Date.now();
 
   for (let playerId in gameState.players) {
@@ -1330,19 +1373,39 @@ setInterval(() => {
         reason: 'Inactivité détectée - Vous avez été déconnecté après 2 minutes sans activité'
       });
 
-      // CORRECTION: Nettoyer les balles orphelines appartenant à ce joueur
-      for (let bulletId in gameState.bullets) {
-        const bullet = gameState.bullets[bulletId];
-        if (bullet.playerId === playerId) {
-          entityManager.destroyBullet(bulletId);
-        }
-      }
+      // Nettoyer les balles orphelines appartenant à ce joueur
+      cleanupPlayerBullets(playerId);
 
       // Supprimer le joueur
       delete gameState.players[playerId];
     }
   }
 }, HEARTBEAT_CHECK_INTERVAL);
+
+// ===============================================
+// SAFE SOCKET HANDLER WRAPPER - Gestion d'erreurs
+// ===============================================
+
+/**
+ * Wrapper pour les handlers Socket.IO qui capture les erreurs
+ * @param {string} handlerName - Nom du handler pour le logging
+ * @param {Function} handler - Fonction handler à wrapper
+ * @returns {Function} Handler wrappé avec gestion d'erreurs
+ */
+function safeHandler(handlerName, handler) {
+  return function(...args) {
+    try {
+      handler.apply(this, args);
+    } catch (error) {
+      console.error(`[SOCKET ERROR] ${handlerName} (${this.id}):`, error);
+      // Optionnellement notifier le client
+      this.emit('error', {
+        message: 'Une erreur est survenue sur le serveur',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  };
+}
 
 // Gestion des connexions Socket.IO
 io.on('connection', (socket) => {
@@ -1421,7 +1484,7 @@ io.on('connection', (socket) => {
   });
 
   // Mouvement du joueur (Rogue-like avec collision)
-  socket.on('playerMove', (data) => {
+  socket.on('playerMove', safeHandler('playerMove', function(data) {
     // Rate limiting
     if (!checkRateLimit(socket.id, 'playerMove')) return;
 
@@ -1438,13 +1501,22 @@ io.on('connection', (socket) => {
       Math.pow(newX - player.x, 2) + Math.pow(newY - player.y, 2)
     );
 
+    // ANTI-CHEAT: Valider que speedMultiplier n'est pas suspect
+    if (player.speedMultiplier > 5) {
+      console.warn(`[ANTI-CHEAT] Player ${player.nickname || socket.id} has suspicious speedMultiplier: ${player.speedMultiplier}, resetting to 1`);
+      player.speedMultiplier = 1;
+    }
+
     // Calculer la vitesse maximale autorisée
     const speedMultiplier = player.speedMultiplier || 1;
     const hasSpeedBoost = player.speedBoost && Date.now() < player.speedBoost;
     const boostMultiplier = hasSpeedBoost ? 2 : 1;
 
     // Distance max par frame (à 30 FPS avec tolérance pour latence)
-    const MAX_DISTANCE_PER_FRAME = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 1.5;
+    // CORRECTION: Ajouter une limite absolue pour éviter l'exploitation
+    const ABSOLUTE_MAX_DISTANCE = 50; // pixels par frame (limite absolue)
+    const calculatedMax = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 1.5;
+    const MAX_DISTANCE_PER_FRAME = Math.min(calculatedMax, ABSOLUTE_MAX_DISTANCE);
 
     // Rejeter le mouvement si distance trop importante (tentative de téléportation)
     if (distance > MAX_DISTANCE_PER_FRAME) {
@@ -1466,10 +1538,10 @@ io.on('connection', (socket) => {
     player.lastActivityTime = Date.now();
 
     // MODE INFINI - Pas de portes ni de changements de salle
-  });
+  }));
 
   // Tir du joueur
-  socket.on('shoot', (data) => {
+  socket.on('shoot', safeHandler('shoot', function(data) {
     // Rate limiting
     if (!checkRateLimit(socket.id, 'shoot')) return;
 
@@ -1535,10 +1607,10 @@ io.on('connection', (socket) => {
         createdAt: now
       });
     }
-  });
+  }));
 
   // Respawn du joueur (Rogue-like - nouveau run)
-  socket.on('respawn', () => {
+  socket.on('respawn', safeHandler('respawn', function() {
     const player = gameState.players[socket.id];
     if (player) {
       player.lastActivityTime = Date.now(); // Mettre à jour l'activité
@@ -1594,10 +1666,10 @@ io.on('connection', (socket) => {
       // Recharger depuis la première salle
       loadRoom(0);
     }
-  });
+  }));
 
   // Sélectionner un upgrade au level up
-  socket.on('selectUpgrade', (data) => {
+  socket.on('selectUpgrade', safeHandler('selectUpgrade', function(data) {
     // Rate limiting
     if (!checkRateLimit(socket.id, 'selectUpgrade')) return;
 
@@ -1619,10 +1691,10 @@ io.on('connection', (socket) => {
     player.invisibleEndTime = 0;
 
     socket.emit('upgradeSelected', { success: true, upgradeId });
-  });
+  }));
 
   // Acheter un item dans le shop
-  socket.on('buyItem', (data) => {
+  socket.on('buyItem', safeHandler('buyItem', function(data) {
     // Rate limiting
     if (!checkRateLimit(socket.id, 'buyItem')) return;
 
@@ -1683,10 +1755,21 @@ io.on('connection', (socket) => {
 
       socket.emit('shopUpdate', { success: true, itemId, category });
     }
-  });
+  }));
 
   // Définir le pseudo du joueur
-  socket.on('setNickname', (data) => {
+  socket.on('setNickname', safeHandler('setNickname', function(data) {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    // CORRECTION CRITIQUE: Vérifier si le joueur a déjà un pseudo AVANT rate limiting
+    if (player.hasNickname) {
+      socket.emit('nicknameRejected', {
+        reason: 'Vous avez déjà choisi un pseudo'
+      });
+      return;
+    }
+
     // Rate limiting
     if (!checkRateLimit(socket.id, 'setNickname')) {
       socket.emit('nicknameRejected', {
@@ -1694,9 +1777,6 @@ io.on('connection', (socket) => {
       });
       return;
     }
-
-    const player = gameState.players[socket.id];
-    if (!player) return;
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
@@ -1741,10 +1821,10 @@ io.on('connection', (socket) => {
       playerId: socket.id,
       nickname: nickname
     });
-  });
+  }));
 
   // Fin de la protection de spawn
-  socket.on('endSpawnProtection', () => {
+  socket.on('endSpawnProtection', safeHandler('endSpawnProtection', function() {
     const player = gameState.players[socket.id];
     if (!player) return;
 
@@ -1752,10 +1832,10 @@ io.on('connection', (socket) => {
 
     player.spawnProtection = false;
     console.log(`${player.nickname || socket.id} n'a plus de protection de spawn`);
-  });
+  }));
 
   // Ouverture du shop - activer l'invisibilité
-  socket.on('shopOpened', () => {
+  socket.on('shopOpened', safeHandler('shopOpened', function() {
     const player = gameState.players[socket.id];
     if (!player) return;
 
@@ -1764,10 +1844,10 @@ io.on('connection', (socket) => {
     player.invisible = true;
     player.invisibleEndTime = Infinity; // Invisibilité sans limite de temps
     console.log(`${player.nickname || socket.id} est invisible (shop ouvert)`);
-  });
+  }));
 
   // Fermeture du shop - désactiver l'invisibilité
-  socket.on('shopClosed', () => {
+  socket.on('shopClosed', safeHandler('shopClosed', function() {
     const player = gameState.players[socket.id];
     if (!player) return;
 
@@ -1776,24 +1856,19 @@ io.on('connection', (socket) => {
     player.invisible = false;
     player.invisibleEndTime = 0;
     console.log(`${player.nickname || socket.id} n'est plus invisible (shop fermé)`);
-  });
+  }));
 
   // Déconnexion du joueur
-  socket.on('disconnect', () => {
+  socket.on('disconnect', safeHandler('disconnect', function() {
     console.log('Un joueur s\'est déconnecté:', socket.id);
 
-    // CORRECTION: Nettoyer les balles orphelines appartenant à ce joueur
-    for (let bulletId in gameState.bullets) {
-      const bullet = gameState.bullets[bulletId];
-      if (bullet.playerId === socket.id) {
-        entityManager.destroyBullet(bulletId);
-      }
-    }
+    // Nettoyer les balles orphelines appartenant à ce joueur
+    cleanupPlayerBullets(socket.id);
 
     delete gameState.players[socket.id];
     // Nettoyer les rate limits
     cleanupRateLimits(socket.id);
-  });
+  }));
 });
 
 // Gestion des erreurs 404 (Route non trouvée)
@@ -1861,6 +1936,71 @@ app.use((err, req, res, next) => {
     </body>
     </html>
   `);
+});
+
+// ===============================================
+// SERVER CLEANUP - Prévention fuite mémoire
+// ===============================================
+
+function cleanupServer() {
+  console.log('[CLEANUP] Nettoyage des ressources serveur...');
+
+  // Arrêter tous les timers
+  if (zombieSpawnTimer) {
+    clearInterval(zombieSpawnTimer);
+    console.log('[CLEANUP] Zombie spawn timer arrêté');
+  }
+  if (powerupSpawnTimer) {
+    clearInterval(powerupSpawnTimer);
+    console.log('[CLEANUP] Powerup spawn timer arrêté');
+  }
+  if (gameLoopTimer) {
+    clearInterval(gameLoopTimer);
+    console.log('[CLEANUP] Game loop timer arrêté');
+  }
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    console.log('[CLEANUP] Heartbeat timer arrêté');
+  }
+
+  // Fermer toutes les connexions socket
+  io.close(() => {
+    console.log('[CLEANUP] Toutes les connexions Socket.IO fermées');
+  });
+
+  // Fermer le serveur HTTP
+  http.close(() => {
+    console.log('[CLEANUP] Serveur HTTP fermé');
+    process.exit(0);
+  });
+
+  // Force exit après 5 secondes si le serveur ne se ferme pas
+  setTimeout(() => {
+    console.log('[CLEANUP] Fermeture forcée après timeout');
+    process.exit(1);
+  }, 5000);
+}
+
+// Gérer les signaux d'arrêt
+process.on('SIGTERM', () => {
+  console.log('[SIGNAL] SIGTERM reçu');
+  cleanupServer();
+});
+
+process.on('SIGINT', () => {
+  console.log('[SIGNAL] SIGINT reçu (Ctrl+C)');
+  cleanupServer();
+});
+
+// Gérer les erreurs non capturées
+process.on('uncaughtException', (err) => {
+  console.error('[ERROR] Exception non capturée:', err);
+  cleanupServer();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[ERROR] Promise rejetée non gérée:', reason);
+  cleanupServer();
 });
 
 http.listen(PORT, () => {
