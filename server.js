@@ -2,14 +2,25 @@ const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
+  // CORS Configuration - Critical for production deployment
+  cors: {
+    origin: "*", // Allow all origins (adjust for production security)
+    methods: ["GET", "POST"],
+    credentials: true
+  },
   // Activer la compression des paquets Socket.IO
   perMessageDeflate: {
     threshold: 1024  // Compresser si > 1KB (réduction 30-40%)
   },
   // Permettre polling comme fallback pour éviter les erreurs 400
-  // Le client upgradера automatiquement vers websocket quand disponible
+  // Le client upgradera automatiquement vers websocket quand disponible
+  transports: ['polling', 'websocket'],
+  allowEIO3: true, // Support Socket.IO v2 clients
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  // Connection options
+  connectTimeout: 45000,
+  upgradeTimeout: 30000
 });
 const path = require('path');
 

@@ -1277,6 +1277,51 @@ class NetworkManager {
   }
 
   setupSocketListeners() {
+    // Connection event handlers
+    this.socket.on('connect', () => {
+      console.log('[Socket.IO] Connected successfully');
+      if (window.toastManager) {
+        window.toastManager.show('✅ Connected to server', 'success');
+      }
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('[Socket.IO] Connection error:', error);
+      if (window.toastManager) {
+        window.toastManager.show('⚠️ Connection error. Retrying...', 'warning');
+      }
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('[Socket.IO] Disconnected:', reason);
+      if (window.toastManager) {
+        window.toastManager.show('🔌 Disconnected from server', 'error');
+      }
+    });
+
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log('[Socket.IO] Reconnected after', attemptNumber, 'attempts');
+      if (window.toastManager) {
+        window.toastManager.show('✅ Reconnected to server', 'success');
+      }
+    });
+
+    this.socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('[Socket.IO] Reconnection attempt', attemptNumber);
+    });
+
+    this.socket.on('reconnect_error', (error) => {
+      console.error('[Socket.IO] Reconnection error:', error);
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('[Socket.IO] Reconnection failed');
+      if (window.toastManager) {
+        window.toastManager.show('❌ Failed to reconnect. Please refresh.', 'error');
+      }
+    });
+
+    // Game event handlers
     this.socket.on('init', (data) => this.handleInit(data));
     this.socket.on('gameState', (state) => this.handleGameState(state));
     this.socket.on('gameStateDelta', (delta) => this.handleGameStateDelta(delta));
@@ -3598,7 +3643,19 @@ class GameEngine {
     // Managers
     window.inputManager = new InputManager();
     const camera = new CameraManager();
-    window.networkManager = new NetworkManager(io());
+
+    // Socket.IO client configuration with proper transports and error handling
+    const socket = io({
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      timeout: 45000
+    });
+
+    window.networkManager = new NetworkManager(socket);
     window.gameUI = new UIManager(window.gameState);
     window.audioManager = new AudioManager(); // Audio feedback
     window.comboSystem = new ComboSystem(); // Système de combos
