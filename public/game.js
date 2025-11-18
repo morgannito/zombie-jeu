@@ -1717,15 +1717,21 @@ class NetworkManager {
       const dy = data.y - oldY;
       const correctionDistance = Math.sqrt(dx * dx + dy * dy);
 
-      // FIX: Apply smooth interpolation instead of instant teleport
-      // Use a higher interpolation factor for local player (more responsive)
-      const interpolationFactor = 0.6;
-
-      // Interpolate position smoothly
-      player.x += dx * interpolationFactor;
-      player.y += dy * interpolationFactor;
-
-      console.log('[Socket.IO] Position correction applied. Distance:', correctionDistance.toFixed(1), 'px');
+      // FIX: Smart interpolation based on correction size
+      // Small corrections (< 15px) = likely collisions → smooth interpolation
+      // Large corrections (>= 15px) = likely anti-cheat/teleport → immediate correction
+      if (correctionDistance < 15) {
+        // Smooth interpolation for small corrections (collisions with walls)
+        const interpolationFactor = 0.7; // Higher factor to converge faster
+        player.x += dx * interpolationFactor;
+        player.y += dy * interpolationFactor;
+        console.log('[Socket.IO] Small correction interpolated. Distance:', correctionDistance.toFixed(1), 'px');
+      } else {
+        // Immediate correction for large differences (anti-cheat, desync)
+        player.x = data.x;
+        player.y = data.y;
+        console.log('[Socket.IO] Large correction applied immediately. Distance:', correctionDistance.toFixed(1), 'px');
+      }
 
       // Note: We no longer set justReconnected flag here, as the reconciliation
       // logic in handleGameStateDelta will now properly handle position corrections
