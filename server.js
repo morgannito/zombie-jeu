@@ -369,7 +369,8 @@ function spawnSingleZombie() {
   const zombieId = gameState.nextZombieId++;
 
   // Les zombies deviennent progressivement plus forts avec les vagues (difficulté progressive améliorée)
-  const waveMultiplier = 1 + (gameState.wave - 1) * 0.10; // +10% par vague (augmenté de 8% à 10%)
+  // CORRECTION: Harmonisé avec ZombieManager.js (0.15 au lieu de 0.10)
+  const waveMultiplier = 1 + (gameState.wave - 1) * 0.15; // +15% par vague
   const zombieHealth = Math.floor(type.health * waveMultiplier);
   const zombieDamage = Math.floor(type.damage * waveMultiplier);
   const zombieSpeed = Math.min(type.speed * (1 + (gameState.wave - 1) * 0.04), type.speed * 1.8); // +4% vitesse par vague, max +80% (augmenté)
@@ -764,12 +765,17 @@ function gameLoop() {
       zombie.x = finalX;
       zombie.y = finalY;
 
-      // Vérifier collision avec joueurs
-      for (let playerId in gameState.players) {
-        const player = gameState.players[playerId];
+      // OPTIMISATION: Utilisation du Quadtree pour trouver les joueurs proches
+      const nearbyPlayers = collisionManager.findPlayersInRadius(
+        zombie.x,
+        zombie.y,
+        zombie.size + CONFIG.PLAYER_SIZE
+      );
 
-        // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
-        if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
+      // Vérifier collision avec les joueurs proches uniquement
+      for (let player of nearbyPlayers) {
+        // Ignorer les joueurs avec protection de spawn ou invisibles
+        if (player.spawnProtection || player.invisible) {
           continue;
         }
 
@@ -926,204 +932,203 @@ function gameLoop() {
     }
 
     // Vérifier collision avec zombies (seulement pour les balles de joueurs)
-    for (let zombieId in gameState.zombies) {
-      const zombie = gameState.zombies[zombieId];
-      if (distance(bullet.x, bullet.y, zombie.x, zombie.y) < zombie.size) {
+    // OPTIMISATION: Utilisation du Quadtree au lieu de boucle O(n*m)
+    const hitZombies = collisionManager.checkBulletZombieCollisions(bullet);
 
-        // Vérifier si ce zombie a déjà été percé par cette balle
-        if (bullet.piercedZombies && bullet.piercedZombies.includes(zombieId)) {
-          continue;
+    for (let {id: zombieId, zombie} of hitZombies) {
+      // Vérifier si ce zombie a déjà été percé par cette balle
+      if (bullet.piercedZombies && bullet.piercedZombies.includes(zombieId)) {
+        continue;
+      }
+
+      zombie.health -= bullet.damage;
+
+      // Vol de vie pour le joueur
+      if (bullet.playerId) {
+        const shooter = gameState.players[bullet.playerId];
+        if (shooter && shooter.lifeSteal > 0) {
+          const lifeStolen = bullet.damage * shooter.lifeSteal;
+          shooter.health = Math.min(shooter.health + lifeStolen, shooter.maxHealth);
         }
+      }
 
-        zombie.health -= bullet.damage;
-
-        // Vol de vie pour le joueur
-        if (bullet.playerId) {
-          const shooter = gameState.players[bullet.playerId];
-          if (shooter && shooter.lifeSteal > 0) {
-            const lifeStolen = bullet.damage * shooter.lifeSteal;
-            shooter.health = Math.min(shooter.health + lifeStolen, shooter.maxHealth);
-          }
-        }
-
-        // Balles perforantes
-        if (bullet.piercing > 0 && bullet.piercedZombies) {
-          bullet.piercedZombies.push(zombieId);
-          if (bullet.piercedZombies.length > bullet.piercing) {
-            delete gameState.bullets[bulletId];
-          }
-        } else {
+      // Balles perforantes
+      if (bullet.piercing > 0 && bullet.piercedZombies) {
+        bullet.piercedZombies.push(zombieId);
+        if (bullet.piercedZombies.length > bullet.piercing) {
           delete gameState.bullets[bulletId];
         }
+      } else {
+        delete gameState.bullets[bulletId];
+      }
 
-        // Balles explosives
-        if (bullet.explosiveRounds && bullet.explosionRadius > 0) {
-          // Créer l'effet visuel d'explosion
-          createExplosion(zombie.x, zombie.y, bullet.explosionRadius, bullet.isRocket);
+      // Balles explosives
+      if (bullet.explosiveRounds && bullet.explosionRadius > 0) {
+        // Créer l'effet visuel d'explosion
+        createExplosion(zombie.x, zombie.y, bullet.explosionRadius, bullet.isRocket);
 
-          // Créer explosion - plus intense pour les roquettes
-          const explosionColor = bullet.isRocket ? '#ff0000' : '#ff8800';
-          const particleCount = bullet.isRocket ? 40 : 20;
-          createParticles(zombie.x, zombie.y, explosionColor, particleCount);
+        // Créer explosion - plus intense pour les roquettes
+        const explosionColor = bullet.isRocket ? '#ff0000' : '#ff8800';
+        const particleCount = bullet.isRocket ? 40 : 20;
+        createParticles(zombie.x, zombie.y, explosionColor, particleCount);
 
-          // Pour les roquettes, créer aussi des particules orange et jaunes
-          if (bullet.isRocket) {
-            createParticles(zombie.x, zombie.y, '#ff8800', 30);
-            createParticles(zombie.x, zombie.y, '#ffff00', 20);
+        // Pour les roquettes, créer aussi des particules orange et jaunes
+        if (bullet.isRocket) {
+          createParticles(zombie.x, zombie.y, '#ff8800', 30);
+          createParticles(zombie.x, zombie.y, '#ffff00', 20);
+        }
+
+        // Infliger dégâts dans le rayon
+        for (let otherId in gameState.zombies) {
+          if (otherId !== zombieId) {
+            const other = gameState.zombies[otherId];
+            const dist = distance(zombie.x, zombie.y, other.x, other.y);
+            if (dist < bullet.explosionRadius) {
+              // Les armes avec explosion définie utilisent les dégâts fixes, sinon un pourcentage
+              const explosionDmg = bullet.rocketExplosionDamage > 0 ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
+              other.health -= explosionDmg;
+              // Créer des particules sur les zombies touchés
+              createParticles(other.x, other.y, other.color, 8);
+            }
+          }
+        }
+      }
+
+      // Créer des particules de sang
+      createParticles(zombie.x, zombie.y, zombie.color, 5);
+
+      if (zombie.health <= 0) {
+        // Créer plus de particules pour la mort
+        createParticles(zombie.x, zombie.y, zombie.color, 15);
+
+        // Effet spécial : Zombie Explosif
+        if (zombie.type === 'explosive') {
+          const explosionType = ZOMBIE_TYPES.explosive;
+          // Créer une énorme explosion de particules
+          createParticles(zombie.x, zombie.y, '#ff00ff', 30);
+          createParticles(zombie.x, zombie.y, '#ff8800', 20);
+
+          // Infliger des dégâts à tous les joueurs dans le rayon
+          for (let playerId in gameState.players) {
+            const player = gameState.players[playerId];
+            // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
+            if (player.alive && player.hasNickname && !player.spawnProtection && !player.invisible) {
+              const dist = distance(zombie.x, zombie.y, player.x, player.y);
+              if (dist < explosionType.explosionRadius) {
+                player.health -= explosionType.explosionDamage;
+                if (player.health <= 0) {
+                  player.health = 0;
+                  player.alive = false;
+                }
+              }
+            }
           }
 
-          // Infliger dégâts dans le rayon
+          // NOUVEAU : Infliger des dégâts aux autres zombies dans le rayon
           for (let otherId in gameState.zombies) {
             if (otherId !== zombieId) {
               const other = gameState.zombies[otherId];
               const dist = distance(zombie.x, zombie.y, other.x, other.y);
-              if (dist < bullet.explosionRadius) {
-                // Les armes avec explosion définie utilisent les dégâts fixes, sinon un pourcentage
-                const explosionDmg = bullet.rocketExplosionDamage > 0 ? bullet.rocketExplosionDamage : (bullet.damage * bullet.explosionDamagePercent);
-                other.health -= explosionDmg;
-                // Créer des particules sur les zombies touchés
+              if (dist < explosionType.explosionRadius) {
+                // L'explosion tue instantanément les zombies normaux, blesse les autres
+                const explosionDamage = explosionType.explosionDamage * 1.5; // 50% plus de dégâts aux zombies
+                other.health -= explosionDamage;
+                // Créer des particules pour montrer l'impact
                 createParticles(other.x, other.y, other.color, 8);
               }
             }
           }
         }
 
-        // Créer des particules de sang
-        createParticles(zombie.x, zombie.y, zombie.color, 5);
+        // Créer du loot avec bonus de combo
+        let goldBonus = zombie.goldDrop;
+        let xpBonus = zombie.xpDrop;
 
-        if (zombie.health <= 0) {
-          // Créer plus de particules pour la mort
-          createParticles(zombie.x, zombie.y, zombie.color, 15);
+        // Mettre à jour le combo et le score du joueur
+        if (bullet.playerId) {
+          const shooter = gameState.players[bullet.playerId];
+          if (shooter && shooter.alive) {
+            const now = Date.now();
+            const COMBO_TIMEOUT = 5000; // 5 secondes pour maintenir le combo
 
-          // Effet spécial : Zombie Explosif
-          if (zombie.type === 'explosive') {
-            const explosionType = ZOMBIE_TYPES.explosive;
-            // Créer une énorme explosion de particules
-            createParticles(zombie.x, zombie.y, '#ff00ff', 30);
-            createParticles(zombie.x, zombie.y, '#ff8800', 20);
-
-            // Infliger des dégâts à tous les joueurs dans le rayon
-            for (let playerId in gameState.players) {
-              const player = gameState.players[playerId];
-              // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
-              if (player.alive && player.hasNickname && !player.spawnProtection && !player.invisible) {
-                const dist = distance(zombie.x, zombie.y, player.x, player.y);
-                if (dist < explosionType.explosionRadius) {
-                  player.health -= explosionType.explosionDamage;
-                  if (player.health <= 0) {
-                    player.health = 0;
-                    player.alive = false;
-                  }
-                }
-              }
+            // Reset ou continue le combo
+            if (shooter.comboTimer > 0 && now - shooter.comboTimer < COMBO_TIMEOUT) {
+              shooter.combo++;
+            } else {
+              shooter.combo = 1;
             }
 
-            // NOUVEAU : Infliger des dégâts aux autres zombies dans le rayon
-            for (let otherId in gameState.zombies) {
-              if (otherId !== zombieId) {
-                const other = gameState.zombies[otherId];
-                const dist = distance(zombie.x, zombie.y, other.x, other.y);
-                if (dist < explosionType.explosionRadius) {
-                  // L'explosion tue instantanément les zombies normaux, blesse les autres
-                  const explosionDamage = explosionType.explosionDamage * 1.5; // 50% plus de dégâts aux zombies
-                  other.health -= explosionDamage;
-                  // Créer des particules pour montrer l'impact
-                  createParticles(other.x, other.y, other.color, 8);
-                }
-              }
+            shooter.comboTimer = now;
+            shooter.kills++;
+            shooter.zombiesKilled++;
+
+            // Mettre à jour le meilleur combo
+            if (shooter.combo > shooter.highestCombo) {
+              shooter.highestCombo = shooter.combo;
             }
-          }
 
-          // Créer du loot avec bonus de combo
-          let goldBonus = zombie.goldDrop;
-          let xpBonus = zombie.xpDrop;
+            // Calculer le multiplicateur de combo
+            let comboMultiplier = 1;
+            if (shooter.combo >= 50) comboMultiplier = 10;
+            else if (shooter.combo >= 30) comboMultiplier = 5;
+            else if (shooter.combo >= 15) comboMultiplier = 3;
+            else if (shooter.combo >= 5) comboMultiplier = 2;
 
-          // Mettre à jour le combo et le score du joueur
-          if (bullet.playerId) {
-            const shooter = gameState.players[bullet.playerId];
-            if (shooter && shooter.alive) {
-              const now = Date.now();
-              const COMBO_TIMEOUT = 5000; // 5 secondes pour maintenir le combo
+            // Appliquer le bonus de combo sur l'or et l'XP
+            goldBonus = Math.floor(zombie.goldDrop * comboMultiplier);
+            xpBonus = Math.floor(zombie.xpDrop * comboMultiplier);
 
-              // Reset ou continue le combo
-              if (shooter.comboTimer > 0 && now - shooter.comboTimer < COMBO_TIMEOUT) {
-                shooter.combo++;
-              } else {
-                shooter.combo = 1;
-              }
+            // Calculer le score (base + combo bonus)
+            const baseScore = zombie.goldDrop + zombie.xpDrop;
+            const comboScore = baseScore * (comboMultiplier - 1);
+            shooter.totalScore += baseScore + comboScore;
 
-              shooter.comboTimer = now;
-              shooter.kills++;
-              shooter.zombiesKilled++;
-
-              // Mettre à jour le meilleur combo
-              if (shooter.combo > shooter.highestCombo) {
-                shooter.highestCombo = shooter.combo;
-              }
-
-              // Calculer le multiplicateur de combo
-              let comboMultiplier = 1;
-              if (shooter.combo >= 50) comboMultiplier = 10;
-              else if (shooter.combo >= 30) comboMultiplier = 5;
-              else if (shooter.combo >= 15) comboMultiplier = 3;
-              else if (shooter.combo >= 5) comboMultiplier = 2;
-
-              // Appliquer le bonus de combo sur l'or et l'XP
-              goldBonus = Math.floor(zombie.goldDrop * comboMultiplier);
-              xpBonus = Math.floor(zombie.xpDrop * comboMultiplier);
-
-              // Calculer le score (base + combo bonus)
-              const baseScore = zombie.goldDrop + zombie.xpDrop;
-              const comboScore = baseScore * (comboMultiplier - 1);
-              shooter.totalScore += baseScore + comboScore;
-
-              // Émettre l'événement de combo pour l'affichage visuel
-              io.to(bullet.playerId).emit('comboUpdate', {
-                combo: shooter.combo,
-                multiplier: comboMultiplier,
-                score: shooter.totalScore,
-                goldBonus: goldBonus - zombie.goldDrop,
-                xpBonus: xpBonus - zombie.xpDrop
-              });
-            }
-          }
-
-          createLoot(zombie.x, zombie.y, goldBonus, xpBonus);
-
-          // Supprimer le zombie
-          delete gameState.zombies[zombieId];
-
-          gameState.zombiesKilledThisWave++;
-
-          // Si c'était le boss, lancer une nouvelle vague (MODE INFINI)
-          if (zombie.isBoss) {
-            // Nouvelle vague !
-            gameState.wave++;
-            gameState.bossSpawned = false;
-            gameState.zombiesKilledThisWave = 0;
-            gameState.zombiesSpawnedThisWave = 0;
-
-            // Accélérer le spawn pour la nouvelle vague
-            restartZombieSpawner();
-
-            // Notifier tous les joueurs de la nouvelle vague
-            io.emit('newWave', {
-              wave: gameState.wave,
-              zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 7 // Mis à jour pour correspondre à la nouvelle progression améliorée
+            // Émettre l'événement de combo pour l'affichage visuel
+            io.to(bullet.playerId).emit('comboUpdate', {
+              combo: shooter.combo,
+              multiplier: comboMultiplier,
+              score: shooter.totalScore,
+              goldBonus: goldBonus - zombie.goldDrop,
+              xpBonus: xpBonus - zombie.xpDrop
             });
+          }
+        }
 
-            // Bonus de santé pour les joueurs survivants
-            for (let playerId in gameState.players) {
-              const player = gameState.players[playerId];
-              if (player.alive) {
-                player.health = Math.min(player.health + 50, player.maxHealth);
-                player.gold += 50; // Bonus d'or pour avoir survécu à la vague
-              }
+        createLoot(zombie.x, zombie.y, goldBonus, xpBonus);
+
+        // Supprimer le zombie
+        delete gameState.zombies[zombieId];
+
+        gameState.zombiesKilledThisWave++;
+
+        // Si c'était le boss, lancer une nouvelle vague (MODE INFINI)
+        if (zombie.isBoss) {
+          // Nouvelle vague !
+          gameState.wave++;
+          gameState.bossSpawned = false;
+          gameState.zombiesKilledThisWave = 0;
+          gameState.zombiesSpawnedThisWave = 0;
+
+          // Accélérer le spawn pour la nouvelle vague
+          restartZombieSpawner();
+
+          // Notifier tous les joueurs de la nouvelle vague
+          io.emit('newWave', {
+            wave: gameState.wave,
+            zombiesCount: CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 7 // Mis à jour pour correspondre à la nouvelle progression améliorée
+          });
+
+          // Bonus de santé pour les joueurs survivants
+          for (let playerId in gameState.players) {
+            const player = gameState.players[playerId];
+            if (player.alive) {
+              player.health = Math.min(player.health + 50, player.maxHealth);
+              player.gold += 50; // Bonus d'or pour avoir survécu à la vague
             }
           }
         }
-        break;
       }
+      break;
     }
   }
 
@@ -1324,6 +1329,14 @@ setInterval(() => {
       io.to(playerId).emit('sessionTimeout', {
         reason: 'Inactivité détectée - Vous avez été déconnecté après 2 minutes sans activité'
       });
+
+      // CORRECTION: Nettoyer les balles orphelines appartenant à ce joueur
+      for (let bulletId in gameState.bullets) {
+        const bullet = gameState.bullets[bulletId];
+        if (bullet.playerId === playerId) {
+          delete gameState.bullets[bulletId];
+        }
+      }
 
       // Supprimer le joueur
       delete gameState.players[playerId];
@@ -1567,6 +1580,14 @@ io.on('connection', (socket) => {
       player.weaponTimer = null;
       player.lastShot = 0;
 
+      // CORRECTION: Réinitialiser les statistiques de run
+      player.zombiesKilled = 0;
+      player.kills = 0;
+      player.combo = 0;
+      player.comboTimer = 0;
+      player.highestCombo = 0;
+      player.totalScore = 0;
+
       // Restaurer les upgrades permanents
       player.upgrades = savedUpgrades;
       player.damageMultiplier = savedMultipliers.damage;
@@ -1763,6 +1784,15 @@ io.on('connection', (socket) => {
   // Déconnexion du joueur
   socket.on('disconnect', () => {
     console.log('Un joueur s\'est déconnecté:', socket.id);
+
+    // CORRECTION: Nettoyer les balles orphelines appartenant à ce joueur
+    for (let bulletId in gameState.bullets) {
+      const bullet = gameState.bullets[bulletId];
+      if (bullet.playerId === socket.id) {
+        delete gameState.bullets[bulletId];
+      }
+    }
+
     delete gameState.players[socket.id];
     // Nettoyer les rate limits
     cleanupRateLimits(socket.id);
