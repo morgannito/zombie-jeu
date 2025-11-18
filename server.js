@@ -1354,6 +1354,15 @@ io.on('connection', (socket) => {
     if (!roomManager.checkWallCollision(newX, newY, CONFIG.PLAYER_SIZE)) {
       player.x = newX;
       player.y = newY;
+    } else {
+      // Collision detected - send position correction to client to keep them in sync
+      // Only send if the client position is significantly different (> 5px)
+      const clientDistance = Math.sqrt(
+        Math.pow(newX - player.x, 2) + Math.pow(newY - player.y, 2)
+      );
+      if (clientDistance > 5) {
+        socket.emit('positionCorrection', { x: player.x, y: player.y });
+      }
     }
 
     player.angle = data.angle;

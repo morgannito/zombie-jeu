@@ -1345,28 +1345,37 @@ class NetworkManager {
   }
 
   handleGameState(state) {
-    // Client-side prediction for local player (but NOT after reconnection)
+    // Save local player prediction for potential restoration
+    let localPlayerState = null;
     if (!this.justReconnected && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
-      const { x, y, angle } = localPlayer;
+      localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
+    }
 
-      window.gameState.updateState(state);
+    // Update state with server data
+    window.gameState.updateState(state);
 
-      // Restore predicted position
-      if (window.gameState.state.players[window.gameState.playerId]) {
-        window.gameState.state.players[window.gameState.playerId].x = x;
-        window.gameState.state.players[window.gameState.playerId].y = y;
-        window.gameState.state.players[window.gameState.playerId].angle = angle;
+    // Restore predicted position with reconciliation
+    if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const serverPlayer = window.gameState.state.players[window.gameState.playerId];
+      const dx = localPlayerState.x - serverPlayer.x;
+      const dy = localPlayerState.y - serverPlayer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // If distance is too large, trust server (possible desync or correction)
+      if (distance < 50) {
+        window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
+        window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
+        window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
+      } else {
+        console.log('[Socket.IO] Large position difference in full state, accepting server position:', distance.toFixed(1), 'px');
       }
-    } else {
-      // Accept server position (initial connection or after reconnection)
-      window.gameState.updateState(state);
+    }
 
-      // Clear reconnection flag after accepting server state
-      if (this.justReconnected) {
-        console.log('[Socket.IO] Position resynchronized after reconnection');
-        this.justReconnected = false;
-      }
+    // Clear reconnection flag after accepting server state
+    if (this.justReconnected) {
+      console.log('[Socket.IO] Position resynchronized after reconnection');
+      this.justReconnected = false;
     }
 
     if (window.gameUI) {
@@ -1377,7 +1386,14 @@ class NetworkManager {
   handleGameStateDelta(delta) {
     // Save local player prediction (but NOT after reconnection)
     let localPlayerState = null;
-    if (!this.justReconnected && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+    let serverHasPlayerUpdate = false;
+
+    // Check if server sent an update for local player
+    if (delta.updated && delta.updated.players && window.gameState.playerId && delta.updated.players[window.gameState.playerId]) {
+      serverHasPlayerUpdate = true;
+    }
+
+    if (!this.justReconnected && !serverHasPlayerUpdate && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
       localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
     }
@@ -1413,13 +1429,28 @@ class NetworkManager {
       if (delta.meta.bossSpawned !== undefined) window.gameState.state.bossSpawned = delta.meta.bossSpawned;
     }
 
-    // Restore local player prediction (but NOT after reconnection)
+    // Restore local player prediction only if:
+    // 1. We have a saved prediction
+    // 2. Server didn't send an update for our player
+    // 3. Position difference is reasonable (< 50px to allow for reconciliation)
     if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
-      window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
-      window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
-      window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
-    } else if (this.justReconnected) {
-      // Clear reconnection flag after accepting server state
+      const serverPlayer = window.gameState.state.players[window.gameState.playerId];
+      const dx = localPlayerState.x - serverPlayer.x;
+      const dy = localPlayerState.y - serverPlayer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // If distance is too large, trust server (possible desync or correction)
+      if (distance < 50) {
+        window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
+        window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
+        window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
+      } else {
+        console.log('[Socket.IO] Large position difference detected, accepting server position:', distance.toFixed(1), 'px');
+      }
+    }
+
+    // Clear reconnection flag after first delta update
+    if (this.justReconnected) {
       console.log('[Socket.IO] Position resynchronized after reconnection (delta)');
       this.justReconnected = false;
     }
@@ -1435,13 +1466,25 @@ class NetworkManager {
 
     // Force update player position to server's authoritative position
     if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
-      window.gameState.state.players[window.gameState.playerId].x = data.x;
-      window.gameState.state.players[window.gameState.playerId].y = data.y;
+      const player = window.gameState.state.players[window.gameState.playerId];
+      const oldX = player.x;
+      const oldY = player.y;
 
-      // Disable client prediction temporarily to accept correction
-      this.justReconnected = true;
+      player.x = data.x;
+      player.y = data.y;
 
-      if (window.toastManager) {
+      // Calculate correction distance for logging
+      const dx = data.x - oldX;
+      const dy = data.y - oldY;
+      const correctionDistance = Math.sqrt(dx * dx + dy * dy);
+
+      console.log('[Socket.IO] Position correction applied. Distance:', correctionDistance.toFixed(1), 'px');
+
+      // Note: We no longer set justReconnected flag here, as the reconciliation
+      // logic in handleGameStateDelta will now properly handle position corrections
+      // by checking the distance difference and accepting server position when needed
+
+      if (window.toastManager && correctionDistance > 20) {
         window.toastManager.show('⚠️ Position corrected', 'warning');
       }
     }
