@@ -1851,7 +1851,7 @@ io.on('connection', (socket) => {
     // Account for 2 server ticks between client updates (33ms = 2 * 16.67ms)
     // Add tolerance for network latency and frame timing variations
     const ABSOLUTE_MAX_DISTANCE = 80; // pixels per client update (increased for 30 FPS client)
-    const calculatedMax = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 2.5; // Increased tolerance
+    const calculatedMax = CONFIG.PLAYER_SPEED * speedMultiplier * boostMultiplier * 7.0; // Increased tolerance for network latency
     const MAX_DISTANCE_PER_FRAME = Math.min(calculatedMax, ABSOLUTE_MAX_DISTANCE);
 
     // Rejeter le mouvement si distance trop importante (tentative de téléportation)
