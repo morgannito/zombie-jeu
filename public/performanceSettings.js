@@ -843,12 +843,17 @@ class PerformanceSettingsManager {
    * Start FPS monitoring
    */
   startFPSMonitoring() {
+    this.autoAdjustCooldown = 0; // Cooldown to prevent spam adjustments
+
     setInterval(() => {
       this.updateFPS();
 
-      // Auto-adjust if enabled and FPS is low
-      if (this.autoAdjust && this.currentFPS < 25) {
+      // Auto-adjust if enabled and FPS is critically low
+      // Only adjust every 5 seconds to avoid spam and allow changes to take effect
+      const now = Date.now();
+      if (this.autoAdjust && this.currentFPS < 20 && now - this.autoAdjustCooldown > 5000) {
         this.autoAdjustPerformance();
+        this.autoAdjustCooldown = now;
       }
     }, 1000);
   }
@@ -896,31 +901,46 @@ class PerformanceSettingsManager {
    * Auto-adjust performance
    */
   autoAdjustPerformance() {
-    console.warn('Low FPS detected, auto-adjusting performance...');
+    console.warn(`Low FPS detected (${this.currentFPS} FPS), auto-adjusting performance...`);
 
-    // Reduce resolution if not already at minimum
-    if (this.settings.resolutionScale > 0.5) {
-      this.settings.resolutionScale = Math.max(0.5, this.settings.resolutionScale - 0.1);
-      this.applyResolutionScale();
-    }
+    let adjusted = false;
 
-    // Disable particles
+    // Step 1: Disable particles first (least visual impact)
     if (this.settings.particlesEnabled) {
       this.settings.particlesEnabled = false;
+      adjusted = true;
+      console.log('→ Disabled particles');
     }
-
-    // Disable grid
-    if (this.settings.gridEnabled) {
+    // Step 2: Disable grid
+    else if (this.settings.gridEnabled) {
       this.settings.gridEnabled = false;
+      adjusted = true;
+      console.log('→ Disabled grid');
     }
-
-    // Lower target FPS
-    if (this.settings.targetFPS > 30) {
+    // Step 3: Reduce resolution gradually
+    else if (this.settings.resolutionScale > 0.5) {
+      this.settings.resolutionScale = Math.max(0.5, this.settings.resolutionScale - 0.1);
+      this.applyResolutionScale();
+      adjusted = true;
+      console.log(`→ Reduced resolution to ${Math.round(this.settings.resolutionScale * 100)}%`);
+    }
+    // Step 4: Lower target FPS as last resort
+    else if (this.settings.targetFPS > 30) {
       this.settings.targetFPS = 30;
+      adjusted = true;
+      console.log('→ Lowered target FPS to 30');
     }
 
-    this.saveSettings();
-    console.log('Performance auto-adjusted:', this.settings);
+    if (adjusted) {
+      this.saveSettings();
+      // Notify game engine
+      if (window.gameEngine) {
+        window.gameEngine.onPerformanceSettingsChanged(this.settings);
+      }
+      console.log('Performance auto-adjusted successfully');
+    } else {
+      console.log('All performance settings already at minimum');
+    }
   }
 
   /**
