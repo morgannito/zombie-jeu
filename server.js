@@ -12,9 +12,10 @@ const io = require('socket.io')(http, {
 });
 const path = require('path');
 
-// Import des systèmes d'optimisation
-const ObjectPool = require('./lib/ObjectPool');
-const Quadtree = require('./lib/Quadtree');
+// Import des modules d'optimisation
+const EntityManager = require('./lib/server/EntityManager');
+const CollisionManager = require('./lib/server/CollisionManager');
+const NetworkManager = require('./lib/server/NetworkManager');
 const MathUtils = require('./lib/MathUtils');
 
 const PORT = process.env.PORT || 3000;
@@ -133,83 +134,17 @@ function cleanupRateLimits(socketId) {
 }
 
 // ===============================================
-// OBJECT POOLS - Réduction de 50-60% du garbage collection
+// MANAGERS D'OPTIMISATION
 // ===============================================
 
-// Pool de balles
-const bulletPool = new ObjectPool(
-  // Create function
-  () => ({
-    id: 0,
-    x: 0,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    playerId: null,
-    zombieId: null,
-    damage: 0,
-    color: '#ffff00',
-    size: 5,
-    piercing: 0,
-    piercedZombies: [],
-    explosiveRounds: false,
-    explosionRadius: 0,
-    explosionDamagePercent: 0,
-    rocketExplosionDamage: 0,
-    isRocket: false,
-    isZombieBullet: false,
-    isFlame: false,
-    isLaser: false,
-    isGrenade: false,
-    isCrossbow: false,
-    gravity: 0,
-    lifetime: null,
-    createdAt: 0
-  }),
-  // Reset function
-  (bullet) => {
-    bullet.playerId = null;
-    bullet.zombieId = null;
-    bullet.piercedZombies = [];
-    bullet.lifetime = null;
-  },
-  200  // Taille initiale
-);
+// EntityManager : Gestion des entités avec Object Pools (-50-60% GC)
+const entityManager = new EntityManager(gameState, CONFIG);
 
-// Pool de particules
-const particlePool = new ObjectPool(
-  () => ({
-    id: 0,
-    x: 0,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    color: '#ffffff',
-    lifetime: 0,
-    size: 3
-  }),
-  (particle) => {
-    particle.lifetime = 0;
-  },
-  300
-);
+// CollisionManager : Détection des collisions avec Quadtree (-60-70% CPU)
+const collisionManager = new CollisionManager(gameState, CONFIG);
 
-// Pool de traînées de poison
-const poisonTrailPool = new ObjectPool(
-  () => ({
-    id: 0,
-    x: 0,
-    y: 0,
-    radius: 35,
-    damage: 2,
-    createdAt: 0,
-    duration: 3000
-  }),
-  (trail) => {
-    trail.createdAt = 0;
-  },
-  50
-);
+// NetworkManager : Compression delta (-80-90% bande passante)
+const networkManager = new NetworkManager(io, gameState);
 
 // Types d'armes (Améliorées pour un gameplay plus rapide)
 const WEAPONS = {
@@ -1125,43 +1060,26 @@ function createLoot(x, y, goldAmount, xpAmount) {
 
 // Créer des particules
 function createParticles(x, y, color, count = 10) {
-  for (let i = 0; i < count; i++) {
-    const particleId = gameState.nextParticleId++;
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 3 + 1;
-
-    gameState.particles[particleId] = {
-      id: particleId,
-      x: x,
-      y: y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      color: color,
-      lifetime: Date.now() + 500,
-      size: Math.random() * 3 + 2
-    };
-  }
+  // Utiliser EntityManager avec Object Pool
+  entityManager.createParticles(x, y, color, count);
 }
 
 // Créer une explosion visuelle
 function createExplosion(x, y, radius, isRocket = false) {
-  const explosionId = gameState.nextExplosionId++;
-  const now = Date.now();
-
-  gameState.explosions[explosionId] = {
-    id: explosionId,
-    x: x,
-    y: y,
-    radius: radius,
-    isRocket: isRocket,
-    createdAt: now,
-    duration: 400 // L'animation dure 400ms
-  };
+  // Utiliser EntityManager avec Object Pool
+  entityManager.createExplosion({
+    x, y, radius, isRocket,
+    createdAt: Date.now(),
+    duration: 400
+  });
 }
 
 // Mise à jour de la logique du jeu
 function gameLoop() {
   const now = Date.now();
+
+  // Reconstruire le Quadtree pour les collisions optimisées
+  collisionManager.rebuildQuadtree();
 
   // Mise à jour des joueurs (power-ups temporaires)
   for (let playerId in gameState.players) {
@@ -1213,46 +1131,33 @@ function gameLoop() {
       const autoFireCooldown = 600 / player.autoTurrets;
 
       if (now - player.lastAutoShot >= autoFireCooldown) {
-        // Trouver le zombie le plus proche
-        let closestZombie = null;
-        let closestDistance = Infinity;
-        const autoTurretRange = 500; // Portée de 500 pixels
-
-        for (let zombieId in gameState.zombies) {
-          const zombie = gameState.zombies[zombieId];
-          const dist = distance(player.x, player.y, zombie.x, zombie.y);
-
-          if (dist < closestDistance && dist <= autoTurretRange) {
-            closestDistance = dist;
-            closestZombie = zombie;
-          }
-        }
+        // Trouver le zombie le plus proche (OPTIMISÉ avec Quadtree)
+        const autoTurretRange = 500;
+        const closestZombie = collisionManager.findClosestZombie(player.x, player.y, autoTurretRange);
 
         // Tirer sur le zombie le plus proche
         if (closestZombie) {
           const angle = Math.atan2(closestZombie.y - player.y, closestZombie.x - player.x);
-          const bulletId = gameState.nextBulletId++;
 
           // Les tourelles font 60% des dégâts normaux
           const baseDamage = CONFIG.BULLET_DAMAGE * 0.6;
           const damage = baseDamage * (player.damageMultiplier || 1);
 
-          gameState.bullets[bulletId] = {
-            id: bulletId,
+          // Créer la balle (OPTIMISÉ avec Object Pool)
+          entityManager.createBullet({
             x: player.x,
             y: player.y,
-            vx: Math.cos(angle) * CONFIG.BULLET_SPEED,
-            vy: Math.sin(angle) * CONFIG.BULLET_SPEED,
+            vx: MathUtils.fastCos(angle) * CONFIG.BULLET_SPEED,
+            vy: MathUtils.fastSin(angle) * CONFIG.BULLET_SPEED,
             playerId: playerId,
             damage: damage,
-            color: '#00ffaa', // Couleur spéciale pour les tourelles
+            color: '#00ffaa',
             piercing: 0,
-            piercedZombies: [],
             explosiveRounds: false,
             explosionRadius: 0,
             explosionDamagePercent: 0,
             isAutoTurret: true
-          };
+          });
 
           player.lastAutoShot = now;
 
@@ -1267,84 +1172,67 @@ function gameLoop() {
   for (let zombieId in gameState.zombies) {
     const zombie = gameState.zombies[zombieId];
 
-    // Capacité spéciale : Zombie Soigneur
+    // Capacité spéciale : Zombie Soigneur (OPTIMISÉ avec Quadtree)
     if (zombie.type === 'healer') {
       const healerType = ZOMBIE_TYPES.healer;
       if (!zombie.lastHeal || now - zombie.lastHeal >= healerType.healCooldown) {
         zombie.lastHeal = now;
 
-        // Soigner les zombies autour
-        for (let otherId in gameState.zombies) {
-          if (otherId !== zombieId) {
-            const other = gameState.zombies[otherId];
-            const dist = distance(zombie.x, zombie.y, other.x, other.y);
-            if (dist < healerType.healRadius && other.health < other.maxHealth) {
-              other.health = Math.min(other.health + healerType.healAmount, other.maxHealth);
-              // Créer des particules de soin
-              createParticles(other.x, other.y, '#00ffff', 5);
-            }
+        // Soigner les zombies autour (OPTIMISÉ)
+        const nearbyZombies = collisionManager.findZombiesInRadius(
+          zombie.x, zombie.y, healerType.healRadius, zombieId
+        );
+
+        for (let other of nearbyZombies) {
+          if (other.health < other.maxHealth) {
+            other.health = Math.min(other.health + healerType.healAmount, other.maxHealth);
+            // Créer des particules de soin
+            createParticles(other.x, other.y, '#00ffff', 5);
           }
         }
       }
     }
 
-    // Capacité spéciale : Zombie Ralentisseur
+    // Capacité spéciale : Zombie Ralentisseur (OPTIMISÉ avec Quadtree)
     if (zombie.type === 'slower') {
       const slowerType = ZOMBIE_TYPES.slower;
 
-      // Ralentir les joueurs dans le rayon
-      for (let playerId in gameState.players) {
-        const player = gameState.players[playerId];
-        if (player.alive) {
-          const dist = distance(zombie.x, zombie.y, player.x, player.y);
-          if (dist < slowerType.slowRadius) {
-            // Appliquer l'effet de ralentissement
-            player.slowedUntil = now + slowerType.slowDuration;
-            player.slowAmount = slowerType.slowAmount;
-          }
-        }
+      // Ralentir les joueurs dans le rayon (OPTIMISÉ)
+      const nearbyPlayers = collisionManager.findPlayersInRadius(
+        zombie.x, zombie.y, slowerType.slowRadius
+      );
+
+      for (let player of nearbyPlayers) {
+        // Appliquer l'effet de ralentissement
+        player.slowedUntil = now + slowerType.slowDuration;
+        player.slowAmount = slowerType.slowAmount;
       }
     }
 
-    // Capacité spéciale : Zombie Tireur
+    // Capacité spéciale : Zombie Tireur (OPTIMISÉ avec Quadtree)
     if (zombie.type === 'shooter') {
       const shooterType = ZOMBIE_TYPES.shooter;
 
       // Vérifier le cooldown de tir
       if (!zombie.lastShot || now - zombie.lastShot >= shooterType.shootCooldown) {
-        // Trouver le joueur le plus proche dans la portée
-        let targetPlayer = null;
-        let targetDistance = Infinity;
-
-        for (let playerId in gameState.players) {
-          const player = gameState.players[playerId];
-          // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
-          if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
-            continue;
-          }
-
-          const dist = distance(zombie.x, zombie.y, player.x, player.y);
-          if (dist < shooterType.shootRange && dist < targetDistance) {
-            targetDistance = dist;
-            targetPlayer = player;
-          }
-        }
+        // Trouver le joueur le plus proche dans la portée (OPTIMISÉ)
+        const targetPlayer = collisionManager.findClosestPlayer(
+          zombie.x, zombie.y, shooterType.shootRange,
+          { ignoreSpawnProtection: true, ignoreInvisible: true }
+        );
 
         // Tirer sur le joueur cible
         if (targetPlayer) {
           zombie.lastShot = now;
-
-          // Créer une balle de zombie
-          const bulletId = gameState.nextBulletId++;
           const angle = Math.atan2(targetPlayer.y - zombie.y, targetPlayer.x - zombie.x);
 
-          gameState.bullets[bulletId] = {
-            id: bulletId,
+          // Créer une balle de zombie (OPTIMISÉ avec Object Pool)
+          entityManager.createBullet({
             x: zombie.x,
             y: zombie.y,
-            vx: Math.cos(angle) * shooterType.bulletSpeed,
-            vy: Math.sin(angle) * shooterType.bulletSpeed,
-            zombieId: zombieId, // Balle de zombie, pas de joueur
+            vx: MathUtils.fastCos(angle) * shooterType.bulletSpeed,
+            vy: MathUtils.fastSin(angle) * shooterType.bulletSpeed,
+            zombieId: zombieId,
             damage: zombie.damage,
             color: shooterType.bulletColor,
             isZombieBullet: true, // Marquer comme balle de zombie
@@ -1353,7 +1241,7 @@ function gameLoop() {
             explosiveRounds: false,
             explosionRadius: 0,
             explosionDamagePercent: 0
-          };
+          });
 
           // Créer des particules de tir
           createParticles(zombie.x, zombie.y, shooterType.bulletColor, 5);
@@ -1386,31 +1274,17 @@ function gameLoop() {
       }
     }
 
-    // Trouver le joueur le plus proche
-    // IMPORTANT: Les zombies ignorent les joueurs sans pseudo, avec protection de spawn, ou invisibles
-    let closestPlayer = null;
-    let closestDistance = Infinity;
-
-    for (let playerId in gameState.players) {
-      const player = gameState.players[playerId];
-
-      // Ignorer les joueurs morts, sans pseudo, avec protection de spawn, ou invisibles
-      if (!player.alive || !player.hasNickname || player.spawnProtection || player.invisible) {
-        continue;
-      }
-
-      const dist = distance(zombie.x, zombie.y, player.x, player.y);
-      if (dist < closestDistance) {
-        closestDistance = dist;
-        closestPlayer = player;
-      }
-    }
+    // Trouver le joueur le plus proche (OPTIMISÉ avec Quadtree)
+    const closestPlayer = collisionManager.findClosestPlayer(
+      zombie.x, zombie.y, Infinity,
+      { ignoreSpawnProtection: true, ignoreInvisible: true }
+    );
 
     // Déplacer le zombie vers le joueur ou de manière aléatoire
     if (closestPlayer) {
       const angle = Math.atan2(closestPlayer.y - zombie.y, closestPlayer.x - zombie.x);
-      const newX = zombie.x + Math.cos(angle) * zombie.speed;
-      const newY = zombie.y + Math.sin(angle) * zombie.speed;
+      const newX = zombie.x + MathUtils.fastCos(angle) * zombie.speed;
+      const newY = zombie.y + MathUtils.fastSin(angle) * zombie.speed;
 
       // Vérifier collision avec les murs - avec système de glissement
       let finalX = zombie.x;
@@ -1806,19 +1680,10 @@ function gameLoop() {
     particle.x += particle.vx;
     particle.y += particle.vy;
     particle.vy += 0.1; // Gravité
-
-    if (now > particle.lifetime) {
-      delete gameState.particles[particleId];
-    }
   }
 
-  // Mise à jour des explosions
-  for (let explosionId in gameState.explosions) {
-    const explosion = gameState.explosions[explosionId];
-    if (now > explosion.createdAt + explosion.duration) {
-      delete gameState.explosions[explosionId];
-    }
-  }
+  // Nettoyer les entités expirées (OPTIMISÉ avec Object Pools)
+  entityManager.cleanupExpiredEntities(now);
 
   // Mise à jour des power-ups
   for (let powerupId in gameState.powerups) {
@@ -1981,147 +1846,14 @@ initializeRooms();
 // DELTA COMPRESSION SYSTEM - Réduction de 80-90% de la bande passante
 // ===============================================
 
-let previousState = {
-  players: {},
-  zombies: {},
-  bullets: {},
-  powerups: {},
-  particles: {},
-  poisonTrails: {},
-  explosions: {},
-  loot: {}
-};
+// Delta compression géré par NetworkManager (voir lib/server/NetworkManager.js)
 
-let fullStateCounter = 0;
-const FULL_STATE_INTERVAL = 30; // Envoyer état complet toutes les 30 frames (1 sec)
-
-/**
- * Calculer les deltas entre deux états
- */
-function calculateDelta(current, previous) {
-  const delta = {
-    updated: {},
-    removed: {},
-    meta: {}
-  };
-
-  const entityTypes = ['players', 'zombies', 'bullets', 'powerups', 'particles', 'poisonTrails', 'explosions', 'loot'];
-
-  entityTypes.forEach(type => {
-    const currentEntities = current[type] || {};
-    const prevEntities = previous[type] || {};
-
-    // Trouver les entités ajoutées ou modifiées
-    Object.keys(currentEntities).forEach(id => {
-      const currentEntity = currentEntities[id];
-      const prevEntity = prevEntities[id];
-
-      // Nouvelle entité ou modifiée
-      if (!prevEntity || hasEntityChanged(currentEntity, prevEntity, type)) {
-        if (!delta.updated[type]) delta.updated[type] = {};
-        delta.updated[type][id] = currentEntity;
-      }
-    });
-
-    // Trouver les entités supprimées
-    Object.keys(prevEntities).forEach(id => {
-      if (!currentEntities[id]) {
-        if (!delta.removed[type]) delta.removed[type] = [];
-        delta.removed[type].push(id);
-      }
-    });
-  });
-
-  // Meta info (toujours inclus)
-  delta.meta = {
-    wave: current.wave,
-    zombiesRemaining: Object.keys(current.zombies || {}).length,
-    walls: current.walls  // Les murs changent rarement
-  };
-
-  return delta;
-}
-
-/**
- * Vérifier si une entité a changé (optimisé)
- */
-function hasEntityChanged(current, previous, type) {
-  // Pour les particules/explosions : toujours considérer comme changé (courte durée de vie)
-  if (type === 'particles' || type === 'explosions' || type === 'bullets') {
-    return true;
-  }
-
-  // Pour les joueurs/zombies : comparer position et santé
-  if (type === 'players' || type === 'zombies') {
-    return (
-      Math.abs(current.x - previous.x) > 1 ||
-      Math.abs(current.y - previous.y) > 1 ||
-      current.health !== previous.health ||
-      current.alive !== previous.alive
-    );
-  }
-
-  // Pour le reste : comparaison basique
-  return JSON.stringify(current) !== JSON.stringify(previous);
-}
-
-/**
- * Copier l'état pour la prochaine comparaison
- */
-function cloneState(state) {
-  return {
-    players: { ...state.players },
-    zombies: { ...state.zombies },
-    bullets: { ...state.bullets },
-    powerups: { ...state.powerups },
-    particles: { ...state.particles },
-    poisonTrails: { ...state.poisonTrails },
-    explosions: { ...state.explosions },
-    loot: { ...state.loot },
-    wave: state.wave,
-    walls: state.walls
-  };
-}
-
-// Game loop à 30 FPS avec Delta Compression
+// Game loop à 30 FPS avec Delta Compression (OPTIMISÉ avec NetworkManager)
 setInterval(() => {
   gameLoop();
 
-  fullStateCounter++;
-
-  // Toutes les 30 frames (1 sec), envoyer l'état complet
-  // Sinon, envoyer seulement les deltas
-  if (fullStateCounter >= FULL_STATE_INTERVAL) {
-    fullStateCounter = 0;
-
-    io.emit('gameState', {
-      full: true,  // Indicateur d'état complet
-      players: gameState.players,
-      zombies: gameState.zombies,
-      bullets: gameState.bullets,
-      powerups: gameState.powerups,
-      particles: gameState.particles,
-      poisonTrails: gameState.poisonTrails,
-      explosions: gameState.explosions,
-      loot: gameState.loot,
-      walls: gameState.walls,
-      wave: gameState.wave,
-      zombiesRemaining: Object.keys(gameState.zombies).length
-    });
-
-    previousState = cloneState(gameState);
-  } else {
-    // Envoyer seulement les deltas
-    const delta = calculateDelta(gameState, previousState);
-
-    // Ne rien envoyer si aucun changement
-    const hasChanges = Object.keys(delta.updated).length > 0 || Object.keys(delta.removed).length > 0;
-
-    if (hasChanges) {
-      io.emit('gameStateDelta', delta);
-      previousState = cloneState(gameState);
-    }
-  }
+  // Émettre l'état du jeu (delta compression automatique)
+  networkManager.emitGameState();
 }, 1000 / 30);
 
 // Vérification périodique de l'inactivité des joueurs
