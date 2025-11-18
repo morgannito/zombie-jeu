@@ -1616,6 +1616,8 @@ class NetworkManager {
           window.gameState.state[type] = {};
         }
         Object.entries(entities).forEach(([id, entity]) => {
+          // Don't interpolate local player here - client-side prediction handles it
+          // Interpolation is only applied in handlePositionCorrection for explicit server corrections
           window.gameState.state[type][id] = entity;
           // Mark entity as seen to prevent orphan cleanup
           window.gameState.markEntitySeen(type, id);
@@ -1704,21 +1706,32 @@ class NetworkManager {
     // Server detected invalid movement and is correcting position
     console.log('[Socket.IO] Position corrected by server:', data);
 
-    // Force update player position to server's authoritative position
+    // Apply smooth interpolation to player position correction
     if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const player = window.gameState.state.players[window.gameState.playerId];
       const oldX = player.x;
       const oldY = player.y;
-
-      player.x = data.x;
-      player.y = data.y;
 
       // Calculate correction distance for logging
       const dx = data.x - oldX;
       const dy = data.y - oldY;
       const correctionDistance = Math.sqrt(dx * dx + dy * dy);
 
-      console.log('[Socket.IO] Position correction applied. Distance:', correctionDistance.toFixed(1), 'px');
+      // FIX: Smart interpolation based on correction size
+      // Small corrections (< 15px) = likely collisions → smooth interpolation
+      // Large corrections (>= 15px) = likely anti-cheat/teleport → immediate correction
+      if (correctionDistance < 15) {
+        // Smooth interpolation for small corrections (collisions with walls)
+        const interpolationFactor = 0.7; // Higher factor to converge faster
+        player.x += dx * interpolationFactor;
+        player.y += dy * interpolationFactor;
+        console.log('[Socket.IO] Small correction interpolated. Distance:', correctionDistance.toFixed(1), 'px');
+      } else {
+        // Immediate correction for large differences (anti-cheat, desync)
+        player.x = data.x;
+        player.y = data.y;
+        console.log('[Socket.IO] Large correction applied immediately. Distance:', correctionDistance.toFixed(1), 'px');
+      }
 
       // Note: We no longer set justReconnected flag here, as the reconciliation
       // logic in handleGameStateDelta will now properly handle position corrections
@@ -1859,6 +1872,11 @@ class PlayerController {
     this.nickname = null;
     this.gameStarted = false;
     this.spawnProtectionEndTime = 0;
+
+    // ULTRA-SMOOTH: Throttle playerMove to match server tick rate (200 FPS)
+    // Maximum responsiveness and precision
+    this.lastNetworkUpdate = 0;
+    this.networkUpdateInterval = 1000 / 200; // 5ms = 200 FPS to match server
   }
 
   setNickname(nickname) {
@@ -1973,13 +1991,17 @@ class PlayerController {
 
       // Update player position only if it changed
       if (finalX !== player.x || finalY !== player.y) {
-        // Client-side prediction
+        // Client-side prediction (always update immediately for smooth visuals)
         player.x = finalX;
         player.y = finalY;
         player.angle = angle;
 
-        // Send to server
-        this.network.playerMove(finalX, finalY, angle);
+        // ULTRA-SMOOTH: Throttle network updates to match server tick rate (200 FPS)
+        // Maximum responsiveness and precision
+        if (now - this.lastNetworkUpdate >= this.networkUpdateInterval) {
+          this.network.playerMove(finalX, finalY, angle);
+          this.lastNetworkUpdate = now;
+        }
       } else {
         // Position didn't change, but update angle
         player.angle = angle;
