@@ -1954,8 +1954,10 @@ io.on('connection', (socket) => {
     const player = gameState.players[socket.id];
     if (!player || !player.alive || !player.hasNickname) return; // Pas de mouvement sans pseudo
 
-    const newX = Math.max(0, Math.min(CONFIG.ROOM_WIDTH, data.x));
-    const newY = Math.max(0, Math.min(CONFIG.ROOM_HEIGHT, data.y));
+    // Clamp position to map boundaries, accounting for player size to prevent leaving map
+    const halfSize = CONFIG.PLAYER_SIZE / 2;
+    const newX = Math.max(halfSize, Math.min(CONFIG.ROOM_WIDTH - halfSize, data.x));
+    const newY = Math.max(halfSize, Math.min(CONFIG.ROOM_HEIGHT - halfSize, data.y));
 
     // VALIDATION: Vérifier la distance parcourue pour éviter la téléportation
     const distance = Math.sqrt(
