@@ -466,7 +466,7 @@ class PerformanceSettingsManager {
     const btn = document.getElementById('fullscreen-btn');
     if (!btn) return;
 
-    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
 
     if (isFullscreen) {
       btn.innerHTML = '⛶';
@@ -564,7 +564,7 @@ class PerformanceSettingsManager {
   setupFullscreenListeners() {
     // Handle fullscreen changes (e.g., when user presses ESC)
     const handleFullscreenChange = () => {
-      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
 
       this.settings.fullscreenEnabled = isFullscreen;
       this.saveSettings();
@@ -586,7 +586,6 @@ class PerformanceSettingsManager {
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
-    document.addEventListener('msfullscreenchange', handleFullscreenChange); // IE11
   }
 
   /**

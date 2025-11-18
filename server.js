@@ -67,6 +67,58 @@ const CONFIG = {
 const INACTIVITY_TIMEOUT = 120000; // 2 minutes d'inactivité avant déconnexion
 const HEARTBEAT_CHECK_INTERVAL = 15000; // Vérifier l'inactivité toutes les 15 secondes
 
+// ===============================================
+// RATE LIMITING SYSTEM
+// ===============================================
+const rateLimits = new Map(); // socketId -> { eventName -> { count, resetTime } }
+
+// Configuration du rate limiting par événement
+const RATE_LIMIT_CONFIG = {
+  'shoot': { maxRequests: 50, windowMs: 1000 }, // 50 tirs par seconde max
+  'playerMove': { maxRequests: 60, windowMs: 1000 }, // 60 mouvements par seconde max
+  'setNickname': { maxRequests: 3, windowMs: 10000 }, // 3 tentatives de pseudo par 10 secondes
+  'selectUpgrade': { maxRequests: 10, windowMs: 5000 }, // 10 upgrades par 5 secondes
+  'buyItem': { maxRequests: 20, windowMs: 5000 }, // 20 achats par 5 secondes
+};
+
+// Fonction de rate limiting
+function checkRateLimit(socketId, eventName) {
+  const config = RATE_LIMIT_CONFIG[eventName];
+  if (!config) return true; // Pas de limite pour cet événement
+
+  const now = Date.now();
+
+  if (!rateLimits.has(socketId)) {
+    rateLimits.set(socketId, {});
+  }
+
+  const socketLimits = rateLimits.get(socketId);
+
+  if (!socketLimits[eventName] || now > socketLimits[eventName].resetTime) {
+    // Nouvelle fenêtre de temps
+    socketLimits[eventName] = {
+      count: 1,
+      resetTime: now + config.windowMs
+    };
+    return true;
+  }
+
+  socketLimits[eventName].count++;
+
+  if (socketLimits[eventName].count > config.maxRequests) {
+    // Limite dépassée
+    console.warn(`[RATE LIMIT] Player ${socketId} exceeded rate limit for ${eventName}: ${socketLimits[eventName].count}/${config.maxRequests}`);
+    return false;
+  }
+
+  return true;
+}
+
+// Nettoyer les limites des joueurs déconnectés
+function cleanupRateLimits(socketId) {
+  rateLimits.delete(socketId);
+}
+
 // Types d'armes (Améliorées pour un gameplay plus rapide)
 const WEAPONS = {
   pistol: {
@@ -1951,6 +2003,9 @@ io.on('connection', (socket) => {
 
   // Mouvement du joueur (Rogue-like avec collision)
   socket.on('playerMove', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'playerMove')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive || !player.hasNickname) return; // Pas de mouvement sans pseudo
 
@@ -1996,6 +2051,9 @@ io.on('connection', (socket) => {
 
   // Tir du joueur
   socket.on('shoot', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'shoot')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive || !player.hasNickname) return; // Pas de tir sans pseudo
 
@@ -2116,6 +2174,9 @@ io.on('connection', (socket) => {
 
   // Sélectionner un upgrade au level up
   socket.on('selectUpgrade', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'selectUpgrade')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive) return;
 
@@ -2138,6 +2199,9 @@ io.on('connection', (socket) => {
 
   // Acheter un item dans le shop
   socket.on('buyItem', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'buyItem')) return;
+
     const player = gameState.players[socket.id];
     if (!player || !player.alive) return;
 
@@ -2199,27 +2263,60 @@ io.on('connection', (socket) => {
 
   // Définir le pseudo du joueur
   socket.on('setNickname', (data) => {
+    // Rate limiting
+    if (!checkRateLimit(socket.id, 'setNickname')) {
+      socket.emit('nicknameRejected', {
+        reason: 'Trop de tentatives. Attendez quelques secondes.'
+      });
+      return;
+    }
+
     const player = gameState.players[socket.id];
     if (!player) return;
 
     player.lastActivityTime = Date.now(); // Mettre à jour l'activité
 
-    const nickname = data.nickname.trim().substring(0, 15); // Max 15 caractères
+    // VALIDATION STRICTE DU PSEUDO
+    let nickname = data.nickname ? data.nickname.trim() : '';
 
-    if (nickname.length >= 2) {
-      player.nickname = nickname;
-      player.hasNickname = true;
-      player.spawnProtection = true;
-      player.spawnProtectionEndTime = Date.now() + 3000; // 3 secondes de protection
+    // Filtrer caractères non autorisés (lettres, chiffres, espaces, tirets, underscores)
+    nickname = nickname.replace(/[^a-zA-Z0-9\s\-_]/g, '');
 
-      console.log(`${socket.id} a choisi le pseudo: ${nickname}`);
+    // Limiter à 15 caractères max
+    nickname = nickname.substring(0, 15);
 
-      // Notifier tous les joueurs
-      io.emit('playerNicknameSet', {
-        playerId: socket.id,
-        nickname: nickname
+    // Vérifier longueur minimale
+    if (nickname.length < 2) {
+      socket.emit('nicknameRejected', {
+        reason: 'Le pseudo doit contenir au moins 2 caractères alphanumériques'
       });
+      return;
     }
+
+    // Vérifier si le pseudo n'est pas déjà pris par un autre joueur
+    const isDuplicate = Object.values(gameState.players).some(
+      p => p.id !== socket.id && p.nickname && p.nickname.toLowerCase() === nickname.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      socket.emit('nicknameRejected', {
+        reason: 'Ce pseudo est déjà utilisé par un autre joueur'
+      });
+      return;
+    }
+
+    player.nickname = nickname;
+    player.hasNickname = true;
+    player.spawnProtection = true;
+    player.spawnProtectionEndTime = Date.now() + 3000; // 3 secondes de protection
+
+    console.log(`${socket.id} a choisi le pseudo: ${nickname}`);
+
+    // Notifier tous les joueurs
+    io.emit('playerNicknameSet', {
+      playerId: socket.id,
+      nickname: nickname
+    });
   });
 
   // Fin de la protection de spawn
@@ -2261,6 +2358,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Un joueur s\'est déconnecté:', socket.id);
     delete gameState.players[socket.id];
+    // Nettoyer les rate limits
+    cleanupRateLimits(socket.id);
   });
 });
 

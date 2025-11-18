@@ -9,15 +9,47 @@ class GemSystem {
     this.gemShop = this.initializeGemShop();
   }
 
+  // ===============================================
+  // SAFE LOCALSTORAGE HELPERS
+  // ===============================================
+  _safeGetItem(key, defaultValue = null) {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn(`localStorage.getItem failed for key "${key}":`, e.message);
+      return defaultValue;
+    }
+  }
+
+  _safeSetItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      console.warn(`localStorage.setItem failed for key "${key}":`, e.message);
+      return false;
+    }
+  }
+
+  _safeRemoveItem(key) {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch (e) {
+      console.warn(`localStorage.removeItem failed for key "${key}":`, e.message);
+      return false;
+    }
+  }
+
   // Charger les gems
   loadGems() {
-    const saved = localStorage.getItem('player_gems');
+    const saved = this._safeGetItem('player_gems');
     return saved ? parseInt(saved) : 0;
   }
 
   // Sauvegarder les gems
   saveGems() {
-    localStorage.setItem('player_gems', this.gems.toString());
+    this._safeSetItem('player_gems', this.gems.toString());
   }
 
   // Ajouter des gems
@@ -244,17 +276,17 @@ class GemSystem {
 
   // Accorder un revive
   grantRevive() {
-    localStorage.setItem('gem_revive_available', 'true');
+    this._safeSetItem('gem_revive_available', 'true');
   }
 
   // Vérifier si revive disponible
   hasRevive() {
-    return localStorage.getItem('gem_revive_available') === 'true';
+    return this._safeGetItem('gem_revive_available') === 'true';
   }
 
   // Utiliser le revive
   useRevive() {
-    localStorage.removeItem('gem_revive_available');
+    this._safeRemoveItem('gem_revive_available');
   }
 
   // Activer un boost temporaire
@@ -265,9 +297,9 @@ class GemSystem {
       endTime: Date.now() + duration
     };
 
-    let activeBoosts = JSON.parse(localStorage.getItem('active_boosts') || '[]');
+    let activeBoosts = JSON.parse(this._safeGetItem('active_boosts') || '[]');
     activeBoosts.push(boost);
-    localStorage.setItem('active_boosts', JSON.stringify(activeBoosts));
+    this._safeSetItem('active_boosts', JSON.stringify(activeBoosts));
 
     // Démarrer un timer pour retirer le boost
     setTimeout(() => {
@@ -277,9 +309,9 @@ class GemSystem {
 
   // Retirer un boost
   removeBoost(boost) {
-    let activeBoosts = JSON.parse(localStorage.getItem('active_boosts') || '[]');
+    let activeBoosts = JSON.parse(this._safeGetItem('active_boosts') || '[]');
     activeBoosts = activeBoosts.filter(b => b.endTime !== boost.endTime);
-    localStorage.setItem('active_boosts', JSON.stringify(activeBoosts));
+    this._safeSetItem('active_boosts', JSON.stringify(activeBoosts));
 
     if (window.toastManager) {
       window.toastManager.show(
@@ -292,14 +324,14 @@ class GemSystem {
 
   // Obtenir les boosts actifs
   getActiveBoosts() {
-    const activeBoosts = JSON.parse(localStorage.getItem('active_boosts') || '[]');
+    const activeBoosts = JSON.parse(this._safeGetItem('active_boosts') || '[]');
     const now = Date.now();
 
     // Filtrer les boosts expirés
     const validBoosts = activeBoosts.filter(b => b.endTime > now);
 
     if (validBoosts.length !== activeBoosts.length) {
-      localStorage.setItem('active_boosts', JSON.stringify(validBoosts));
+      this._safeSetItem('active_boosts', JSON.stringify(validBoosts));
     }
 
     return validBoosts;
@@ -307,40 +339,40 @@ class GemSystem {
 
   // Appliquer un boost permanent
   applyPermanentBoost(type, amount) {
-    const boosts = JSON.parse(localStorage.getItem('permanent_boosts') || '{}');
+    const boosts = JSON.parse(this._safeGetItem('permanent_boosts') || '{}');
     boosts[type] = (boosts[type] || 0) + amount;
-    localStorage.setItem('permanent_boosts', JSON.stringify(boosts));
+    this._safeSetItem('permanent_boosts', JSON.stringify(boosts));
   }
 
   // Obtenir les boosts permanents
   getPermanentBoosts() {
-    return JSON.parse(localStorage.getItem('permanent_boosts') || '{}');
+    return JSON.parse(this._safeGetItem('permanent_boosts') || '{}');
   }
 
   // Appliquer le starter boost
   applyStarterBoost() {
-    localStorage.setItem('starter_boost', 'true');
+    this._safeSetItem('starter_boost', 'true');
   }
 
   // Vérifier si starter boost actif
   hasStarterBoost() {
-    return localStorage.getItem('starter_boost') === 'true';
+    return this._safeGetItem('starter_boost') === 'true';
   }
 
   // Accorder vie supplémentaire
   grantExtraLife(amount) {
-    const extraLife = parseInt(localStorage.getItem('gem_extra_life') || '0');
-    localStorage.setItem('gem_extra_life', (extraLife + amount).toString());
+    const extraLife = parseInt(this._safeGetItem('gem_extra_life') || '0');
+    this._safeSetItem('gem_extra_life', (extraLife + amount).toString());
   }
 
   // Obtenir vie supplémentaire
   getExtraLife() {
-    return parseInt(localStorage.getItem('gem_extra_life') || '0');
+    return parseInt(this._safeGetItem('gem_extra_life') || '0');
   }
 
   // Consommer vie supplémentaire
   consumeExtraLife() {
-    localStorage.removeItem('gem_extra_life');
+    this._safeRemoveItem('gem_extra_life');
   }
 
   // Ouvrir le shop instantanément
@@ -351,7 +383,7 @@ class GemSystem {
 
   // Enregistrer un achat
   recordPurchase(itemId) {
-    const purchases = JSON.parse(localStorage.getItem('gem_purchases') || '{}');
+    const purchases = JSON.parse(this._safeGetItem('gem_purchases') || '{}');
     const runId = this.getCurrentRunId();
 
     if (!purchases[runId]) {
@@ -363,12 +395,12 @@ class GemSystem {
       timestamp: Date.now()
     });
 
-    localStorage.setItem('gem_purchases', JSON.stringify(purchases));
+    this._safeSetItem('gem_purchases', JSON.stringify(purchases));
   }
 
   // Obtenir l'usage dans la run actuelle
   getUsageThisRun(itemId) {
-    const purchases = JSON.parse(localStorage.getItem('gem_purchases') || '{}');
+    const purchases = JSON.parse(this._safeGetItem('gem_purchases') || '{}');
     const runId = this.getCurrentRunId();
 
     if (!purchases[runId]) {
@@ -380,13 +412,13 @@ class GemSystem {
 
   // Obtenir l'ID de la run actuelle
   getCurrentRunId() {
-    return localStorage.getItem('current_run_id') || 'no_run';
+    return this._safeGetItem('current_run_id') || 'no_run';
   }
 
   // Nouvelle run (reset les achats par run)
   startNewRun() {
     const runId = 'run_' + Date.now();
-    localStorage.setItem('current_run_id', runId);
+    this._safeSetItem('current_run_id', runId);
   }
 
   // Mettre à jour l'affichage des gems
@@ -478,16 +510,16 @@ class GemSystem {
 
   // Vérifier si un permanent est possédé
   isPermanentOwned(itemId) {
-    const owned = JSON.parse(localStorage.getItem('permanent_items_owned') || '[]');
+    const owned = JSON.parse(this._safeGetItem('permanent_items_owned') || '[]');
     return owned.includes(itemId);
   }
 
   // Marquer un permanent comme possédé
   markPermanentOwned(itemId) {
-    const owned = JSON.parse(localStorage.getItem('permanent_items_owned') || '[]');
+    const owned = JSON.parse(this._safeGetItem('permanent_items_owned') || '[]');
     if (!owned.includes(itemId)) {
       owned.push(itemId);
-      localStorage.setItem('permanent_items_owned', JSON.stringify(owned));
+      this._safeSetItem('permanent_items_owned', JSON.stringify(owned));
     }
   }
 
