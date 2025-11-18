@@ -83,9 +83,11 @@ const entityManager = new EntityManager(gameState, CONFIG);
 const collisionManager = new CollisionManager(gameState, CONFIG);
 const networkManager = new NetworkManager(io, gameState);
 
-// Managers de game logic
+// Managers de game logic - CORRECTION: Créer roomManager AVANT zombieManager
 const roomManager = new RoomManager(gameState, CONFIG, io);
 const playerManager = new PlayerManager(gameState, CONFIG, LEVEL_UP_UPGRADES);
+
+// CORRECTION: zombieManager créé après roomManager pour avoir accès à checkWallCollision
 const zombieManager = new ZombieManager(
   gameState,
   CONFIG,
@@ -282,39 +284,11 @@ function initializeRooms() {
 
 // Charger une salle spécifique
 function loadRoom(roomIndex) {
-  gameState.currentRoom = roomIndex;
-  gameState.walls = [];
-  gameState.bossSpawned = false;
-  gameState.zombiesKilledThisWave = 0;
-
-  const room = gameState.rooms[roomIndex];
-
-  // Charger tous les murs (extérieurs + obstacles)
-  gameState.walls = [...room.walls, ...room.obstacles];
-
-  // Nettoyer les zombies existants
-  gameState.zombies = {};
-
-  io.emit('roomChanged', {
-    roomIndex: roomIndex,
-    totalRooms: CONFIG.ROOMS_PER_RUN,
-    walls: gameState.walls,
-    doors: room.doors
-  });
+  roomManager.loadRoom(roomIndex);
 }
 
-// Vérifier collision avec les murs
-function checkWallCollision(x, y, size) {
-  for (let wall of gameState.walls) {
-    if (x + size > wall.x &&
-        x - size < wall.x + wall.width &&
-        y + size > wall.y &&
-        y - size < wall.y + wall.height) {
-      return true;
-    }
-  }
-  return false;
-}
+// CORRECTION: Suppression de la fonction checkWallCollision dupliquée
+// Utiliser roomManager.checkWallCollision() à la place
 
 // Calculer l'XP nécessaire pour le niveau suivant (Courbe améliorée plus progressive)
 function getXPForLevel(level) {
@@ -343,7 +317,7 @@ function spawnPowerup() {
     x = 100 + Math.random() * (CONFIG.ROOM_WIDTH - 200);
     y = 100 + Math.random() * (CONFIG.ROOM_HEIGHT - 200);
     attempts++;
-  } while (checkWallCollision(x, y, CONFIG.POWERUP_SIZE) && attempts < 50);
+  } while (roomManager.checkWallCollision(x, y, CONFIG.POWERUP_SIZE) && attempts < 50);
 
   if (attempts >= 50) return;
 
@@ -617,18 +591,18 @@ function gameLoop() {
       let finalY = zombie.y;
 
       // Essayer de se déplacer dans les deux directions
-      if (!checkWallCollision(newX, newY, zombie.size)) {
+      if (!roomManager.checkWallCollision(newX, newY, zombie.size)) {
         // Pas de collision, mouvement libre
         finalX = newX;
         finalY = newY;
       } else {
         // Collision détectée, essayer de glisser le long des murs
         // Essayer uniquement l'axe X
-        if (!checkWallCollision(newX, zombie.y, zombie.size)) {
+        if (!roomManager.checkWallCollision(newX, zombie.y, zombie.size)) {
           finalX = newX;
         }
         // Essayer uniquement l'axe Y
-        if (!checkWallCollision(zombie.x, newY, zombie.size)) {
+        if (!roomManager.checkWallCollision(zombie.x, newY, zombie.size)) {
           finalY = newY;
         }
       }
@@ -697,7 +671,7 @@ function gameLoop() {
       let finalY = zombie.y;
 
       // Essayer de se déplacer dans les deux directions
-      if (!checkWallCollision(newX, newY, zombie.size)) {
+      if (!roomManager.checkWallCollision(newX, newY, zombie.size)) {
         // Pas de collision, mouvement libre
         finalX = newX;
         finalY = newY;
@@ -716,19 +690,8 @@ function gameLoop() {
   for (let trailId in gameState.poisonTrails) {
     const trail = gameState.poisonTrails[trailId];
 
-    // Nettoyer les traînées expirées (après 3 secondes)
-    if (now - trail.createdAt >= trail.duration) {
-      // CORRECTION: Nettoyer le tracking de dégâts pour cette trail dans tous les joueurs
-      for (let playerId in gameState.players) {
-        const p = gameState.players[playerId];
-        if (p.lastPoisonDamageByTrail && p.lastPoisonDamageByTrail[trailId]) {
-          delete p.lastPoisonDamageByTrail[trailId];
-        }
-      }
-
-      entityManager.destroyPoisonTrail(trailId);
-      continue;
-    }
+    // CORRECTION: Le nettoyage des traînées expirées est maintenant géré par EntityManager.cleanupExpiredEntities()
+    // Pas besoin de le faire ici
 
     // OPTIMISATION: Utiliser le Quadtree pour trouver les joueurs proches
     const nearbyPlayers = collisionManager.findPlayersInRadius(
@@ -787,7 +750,7 @@ function gameLoop() {
     // Retirer les balles hors de la salle ou qui touchent un mur
     if (bullet.x < 0 || bullet.x > CONFIG.ROOM_WIDTH ||
         bullet.y < 0 || bullet.y > CONFIG.ROOM_HEIGHT ||
-        checkWallCollision(bullet.x, bullet.y, CONFIG.BULLET_SIZE)) {
+        roomManager.checkWallCollision(bullet.x, bullet.y, CONFIG.BULLET_SIZE)) {
       entityManager.destroyBullet(bulletId);
       continue;
     }
@@ -1377,7 +1340,7 @@ io.on('connection', (socket) => {
     }
 
     // Vérifier collision avec les murs
-    if (!checkWallCollision(newX, newY, CONFIG.PLAYER_SIZE)) {
+    if (!roomManager.checkWallCollision(newX, newY, CONFIG.PLAYER_SIZE)) {
       player.x = newX;
       player.y = newY;
     }
