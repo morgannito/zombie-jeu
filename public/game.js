@@ -1270,7 +1270,10 @@ class LeaderboardSystem {
 class NetworkManager {
   constructor(socket) {
     this.socket = socket;
+    this.isConnected = false;
+    this.reconnectAttempts = 0;
     this.setupSocketListeners();
+    this.setupConnectionHandlers();
   }
 
   setupSocketListeners() {
@@ -1286,6 +1289,122 @@ class NetworkManager {
     this.socket.on('shopUpdate', (data) => this.handleShopUpdate(data));
     this.socket.on('comboUpdate', (data) => this.handleComboUpdate(data));
     this.socket.on('comboReset', () => this.handleComboReset());
+  }
+
+  setupConnectionHandlers() {
+    // Connexion établie
+    this.socket.on('connect', () => {
+      this.isConnected = true;
+      console.log('✅ Connected to server');
+
+      if (this.reconnectAttempts > 0) {
+        if (window.toastManager) {
+          window.toastManager.show('Reconnecté au serveur !', 'success');
+        }
+        this.reconnectAttempts = 0;
+      }
+
+      // Masquer l'overlay de déconnexion s'il existe
+      this.hideDisconnectOverlay();
+    });
+
+    // Déconnexion
+    this.socket.on('disconnect', (reason) => {
+      this.isConnected = false;
+      console.warn('❌ Disconnected from server:', reason);
+
+      if (reason === 'io server disconnect') {
+        // Le serveur a forcé la déconnexion, il faut se reconnecter manuellement
+        if (window.toastManager) {
+          window.toastManager.show('Déconnecté par le serveur. Rechargez la page.', 'error');
+        }
+        this.showDisconnectOverlay('Déconnecté par le serveur', true);
+      } else {
+        // Déconnexion due à des problèmes réseau, Socket.IO va essayer de se reconnecter
+        if (window.toastManager) {
+          window.toastManager.show('Connexion perdue. Reconnexion...', 'warning');
+        }
+        this.showDisconnectOverlay('Connexion perdue...', false);
+      }
+    });
+
+    // Erreur de connexion
+    this.socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      this.reconnectAttempts++;
+
+      if (this.reconnectAttempts <= 5) {
+        console.log(`Reconnection attempt ${this.reconnectAttempts}/5...`);
+      } else if (this.reconnectAttempts === 10) {
+        if (window.toastManager) {
+          window.toastManager.show('Problème de connexion persistant. Vérifiez votre réseau.', 'error');
+        }
+      }
+    });
+
+    // Tentative de reconnexion
+    this.socket.io.on('reconnect_attempt', (attemptNumber) => {
+      console.log(`Attempting to reconnect (${attemptNumber})...`);
+    });
+
+    // Reconnexion réussie
+    this.socket.io.on('reconnect', (attemptNumber) => {
+      console.log(`✅ Reconnected after ${attemptNumber} attempts`);
+      this.isConnected = true;
+      this.reconnectAttempts = 0;
+    });
+
+    // Échec de reconnexion
+    this.socket.io.on('reconnect_failed', () => {
+      console.error('❌ Failed to reconnect');
+      if (window.toastManager) {
+        window.toastManager.show('Impossible de se reconnecter. Rechargez la page.', 'error');
+      }
+      this.showDisconnectOverlay('Échec de reconnexion', true);
+    });
+  }
+
+  showDisconnectOverlay(message, showReload = false) {
+    // Créer ou mettre à jour l'overlay de déconnexion
+    let overlay = document.getElementById('disconnect-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'disconnect-overlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        color: white;
+        font-family: Arial, sans-serif;
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+      <div style="text-align: center; padding: 20px;">
+        <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+        <h2 style="margin: 10px 0; font-size: 24px;">${message}</h2>
+        ${!showReload ? '<p style="margin: 10px 0;">Tentative de reconnexion en cours...</p>' : ''}
+        ${!showReload ? '<div style="margin: 20px 0;"><div class="loading-spinner"></div></div>' : ''}
+        ${showReload ? '<button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 5px;">Recharger la page</button>' : ''}
+      </div>
+    `;
+    overlay.style.display = 'flex';
+  }
+
+  hideDisconnectOverlay() {
+    const overlay = document.getElementById('disconnect-overlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+    }
   }
 
   handleInit(data) {
