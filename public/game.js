@@ -6,6 +6,64 @@
  */
 
 /* ============================================
+   SESSION MANAGEMENT - Reconnection handling
+   ============================================ */
+
+class SessionManager {
+  constructor() {
+    this.sessionId = this.getOrCreateSessionId();
+  }
+
+  /**
+   * Generate a UUID v4
+   * @returns {string} UUID
+   */
+  generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  /**
+   * Get existing sessionId from localStorage or create a new one
+   * @returns {string} Session ID
+   */
+  getOrCreateSessionId() {
+    let sessionId = localStorage.getItem('zombie_session_id');
+
+    if (!sessionId) {
+      sessionId = this.generateUUID();
+      localStorage.setItem('zombie_session_id', sessionId);
+      console.log('[Session] Created new session ID:', sessionId);
+    } else {
+      console.log('[Session] Using existing session ID:', sessionId);
+    }
+
+    return sessionId;
+  }
+
+  /**
+   * Get the current session ID
+   * @returns {string}
+   */
+  getSessionId() {
+    return this.sessionId;
+  }
+
+  /**
+   * Reset session (for debugging or explicit logout)
+   */
+  resetSession() {
+    localStorage.removeItem('zombie_session_id');
+    this.sessionId = this.generateUUID();
+    localStorage.setItem('zombie_session_id', this.sessionId);
+    console.log('[Session] Reset session ID:', this.sessionId);
+  }
+}
+
+/* ============================================
    CONSTANTS & CONFIGURATION
    ============================================ */
 
@@ -1343,6 +1401,12 @@ class NetworkManager {
 
   handleInit(data) {
     window.gameState.initialize(data);
+
+    // Show notification if session was recovered
+    if (data.recovered && window.toastManager) {
+      window.toastManager.show('🔄 Session restaurée ! Votre progression a été récupérée.', 'success');
+      console.log('[Session] State successfully recovered');
+    }
   }
 
   handleGameState(state) {
@@ -3727,6 +3791,9 @@ class GameEngine {
     // Global game state
     window.gameState = new GameStateManager();
 
+    // Session manager for reconnection handling
+    window.sessionManager = new SessionManager();
+
     // Performance settings (must be initialized early)
     if (typeof PerformanceSettingsManager !== 'undefined') {
       window.performanceSettings = new PerformanceSettingsManager();
@@ -3738,6 +3805,7 @@ class GameEngine {
     const camera = new CameraManager();
 
     // Socket.IO client configuration with proper transports and error handling
+    // Include sessionId for reconnection recovery
     const socket = io({
       transports: ['polling', 'websocket'],
       upgrade: true,
@@ -3745,7 +3813,10 @@ class GameEngine {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      timeout: 45000
+      timeout: 45000,
+      auth: {
+        sessionId: window.sessionManager.getSessionId()
+      }
     });
 
     window.networkManager = new NetworkManager(socket);

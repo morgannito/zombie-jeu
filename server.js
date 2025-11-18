@@ -1341,12 +1341,71 @@ function safeHandler(handlerName, handler) {
   };
 }
 
+// ===============================================
+// SESSION RECOVERY SYSTEM - Reconnection state management
+// ===============================================
+
+/**
+ * Map to store disconnected player states for recovery
+ * Key: sessionId, Value: { playerState, disconnectedAt, previousSocketId }
+ * States are kept for 5 minutes after disconnection
+ */
+const disconnectedPlayers = new Map();
+const SESSION_RECOVERY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Periodically clean up expired session recovery states
+ */
+setInterval(() => {
+  const now = Date.now();
+  let cleanedCount = 0;
+
+  for (const [sessionId, data] of disconnectedPlayers.entries()) {
+    if (now - data.disconnectedAt > SESSION_RECOVERY_TIMEOUT) {
+      disconnectedPlayers.delete(sessionId);
+      cleanedCount++;
+    }
+  }
+
+  if (cleanedCount > 0) {
+    console.log(`[SESSION RECOVERY] Cleaned ${cleanedCount} expired session(s)`);
+  }
+}, 60000); // Check every minute
+
 // Gestion des connexions Socket.IO
 io.on('connection', (socket) => {
-  console.log('Un joueur s\'est connecté:', socket.id);
+  const sessionId = socket.handshake.auth?.sessionId;
 
-  // Créer un nouveau joueur (Rogue-like)
-  gameState.players[socket.id] = {
+  console.log('Un joueur s\'est connecté:', socket.id, sessionId ? `(Session: ${sessionId})` : '(No session)');
+
+  // RECOVERY: Check if this session has a saved state
+  let playerRecovered = false;
+  if (sessionId && disconnectedPlayers.has(sessionId)) {
+    const savedData = disconnectedPlayers.get(sessionId);
+    const timeSinceDisconnect = Date.now() - savedData.disconnectedAt;
+
+    console.log(`[SESSION RECOVERY] Found saved state for session ${sessionId} (disconnected ${Math.round(timeSinceDisconnect / 1000)}s ago)`);
+
+    // Restore player state with new socket ID
+    const restoredPlayer = {
+      ...savedData.playerState,
+      id: socket.id, // Update to new socket ID
+      lastActivityTime: Date.now() // Reset activity timer
+    };
+
+    gameState.players[socket.id] = restoredPlayer;
+    disconnectedPlayers.delete(sessionId);
+    playerRecovered = true;
+
+    console.log(`[SESSION RECOVERY] Restored player ${restoredPlayer.nickname || 'Unknown'} (Level ${restoredPlayer.level}, ${restoredPlayer.health}/${restoredPlayer.maxHealth} HP, ${restoredPlayer.gold} gold)`);
+  }
+
+  // Create new player if no recovery happened
+  if (!playerRecovered) {
+    console.log(`[SESSION] Creating new player for ${socket.id}`);
+
+    // Créer un nouveau joueur (Rogue-like)
+    gameState.players[socket.id] = {
     id: socket.id,
     nickname: null, // Pseudo non défini au départ
     hasNickname: false, // Le joueur n'a pas encore choisi de pseudo
@@ -1403,6 +1462,7 @@ io.on('connection', (socket) => {
     autoTurrets: 0,
     lastAutoShot: Date.now()
   };
+  }
 
   // Envoyer la configuration au client
   socket.emit('init', {
@@ -1414,7 +1474,8 @@ io.on('connection', (socket) => {
     shopItems: SHOP_ITEMS,
     walls: gameState.walls,
     rooms: gameState.rooms.length,
-    currentRoom: gameState.currentRoom
+    currentRoom: gameState.currentRoom,
+    recovered: playerRecovered // Indicate if state was recovered
   });
 
   // Mouvement du joueur (Rogue-like avec collision)
@@ -1877,12 +1938,35 @@ io.on('connection', (socket) => {
 
   // Déconnexion du joueur
   socket.on('disconnect', safeHandler('disconnect', function() {
-    console.log('Un joueur s\'est déconnecté:', socket.id);
+    const player = gameState.players[socket.id];
+    const sessionId = socket.handshake.auth?.sessionId;
+
+    console.log('Un joueur s\'est déconnecté:', socket.id, sessionId ? `(Session: ${sessionId})` : '(No session)');
+
+    // SESSION RECOVERY: Save player state for recovery if session exists
+    if (sessionId && player) {
+      // Only save state if player has actually started playing (has nickname)
+      if (player.hasNickname && player.alive) {
+        // Create a deep copy of player state
+        const playerStateCopy = JSON.parse(JSON.stringify(player));
+
+        disconnectedPlayers.set(sessionId, {
+          playerState: playerStateCopy,
+          disconnectedAt: Date.now(),
+          previousSocketId: socket.id
+        });
+
+        console.log(`[SESSION RECOVERY] Saved state for player ${player.nickname || 'Unknown'} (Level ${player.level}, ${player.health}/${player.maxHealth} HP, ${player.gold} gold)`);
+        console.log(`[SESSION RECOVERY] Player can reconnect within ${SESSION_RECOVERY_TIMEOUT / 1000}s to restore state`);
+      }
+    }
 
     // Nettoyer les balles orphelines appartenant à ce joueur
     cleanupPlayerBullets(socket.id);
 
+    // Remove from active players
     delete gameState.players[socket.id];
+
     // Nettoyer les rate limits
     cleanupRateLimits(socket.id);
   }));
