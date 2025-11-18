@@ -3502,14 +3502,53 @@ class GameEngine {
 }
 
 /* ============================================
+   INSTRUCTIONS TOGGLE HANDLER
+   ============================================ */
+
+function initInstructionsToggle() {
+  const instructionsPanel = document.getElementById('instructions');
+  const instructionsToggle = document.getElementById('instructions-toggle');
+  const instructionsHeader = document.getElementById('instructions-header');
+
+  if (!instructionsPanel || !instructionsToggle || !instructionsHeader) {
+    console.warn('Instructions elements not found');
+    return;
+  }
+
+  // Toggle function
+  const toggleInstructions = () => {
+    instructionsPanel.classList.toggle('collapsed');
+
+    // Update button icon
+    if (instructionsPanel.classList.contains('collapsed')) {
+      instructionsToggle.textContent = '▼';
+    } else {
+      instructionsToggle.textContent = '▲';
+    }
+  };
+
+  // Add click event listeners
+  instructionsHeader.addEventListener('click', toggleInstructions);
+
+  // Prevent double-toggle when clicking the button directly
+  instructionsToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  console.log('✅ Instructions toggle initialized');
+}
+
+/* ============================================
    GAME INITIALIZATION
    ============================================ */
 
 // Start the game when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
+    initInstructionsToggle();
     new GameEngine();
   });
 } else {
+  initInstructionsToggle();
   new GameEngine();
 }
