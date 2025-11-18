@@ -1273,13 +1273,62 @@ class LeaderboardSystem {
 class NetworkManager {
   constructor(socket) {
     this.socket = socket;
+    this.justReconnected = false; // Flag to track reconnection state
     this.setupSocketListeners();
   }
 
   setupSocketListeners() {
+    // Connection event handlers
+    this.socket.on('connect', () => {
+      console.log('[Socket.IO] Connected successfully');
+      if (window.toastManager) {
+        window.toastManager.show('✅ Connected to server', 'success');
+      }
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('[Socket.IO] Connection error:', error);
+      if (window.toastManager) {
+        window.toastManager.show('⚠️ Connection error. Retrying...', 'warning');
+      }
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('[Socket.IO] Disconnected:', reason);
+      if (window.toastManager) {
+        window.toastManager.show('🔌 Disconnected from server', 'error');
+      }
+    });
+
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log('[Socket.IO] Reconnected after', attemptNumber, 'attempts');
+      // Set flag to disable client prediction temporarily
+      this.justReconnected = true;
+      if (window.toastManager) {
+        window.toastManager.show('✅ Reconnected to server', 'success');
+      }
+    });
+
+    this.socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('[Socket.IO] Reconnection attempt', attemptNumber);
+    });
+
+    this.socket.on('reconnect_error', (error) => {
+      console.error('[Socket.IO] Reconnection error:', error);
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('[Socket.IO] Reconnection failed');
+      if (window.toastManager) {
+        window.toastManager.show('❌ Failed to reconnect. Please refresh.', 'error');
+      }
+    });
+
+    // Game event handlers
     this.socket.on('init', (data) => this.handleInit(data));
     this.socket.on('gameState', (state) => this.handleGameState(state));
     this.socket.on('gameStateDelta', (delta) => this.handleGameStateDelta(delta));
+    this.socket.on('positionCorrection', (data) => this.handlePositionCorrection(data));
     this.socket.on('bossSpawned', (data) => this.handleBossSpawned(data));
     this.socket.on('newWave', (data) => this.handleNewWave(data));
     this.socket.on('levelUp', (data) => this.handleLevelUp(data));
@@ -1296,8 +1345,8 @@ class NetworkManager {
   }
 
   handleGameState(state) {
-    // Client-side prediction for local player
-    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+    // Client-side prediction for local player (but NOT after reconnection)
+    if (!this.justReconnected && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
       const { x, y, angle } = localPlayer;
 
@@ -1310,7 +1359,14 @@ class NetworkManager {
         window.gameState.state.players[window.gameState.playerId].angle = angle;
       }
     } else {
+      // Accept server position (initial connection or after reconnection)
       window.gameState.updateState(state);
+
+      // Clear reconnection flag after accepting server state
+      if (this.justReconnected) {
+        console.log('[Socket.IO] Position resynchronized after reconnection');
+        this.justReconnected = false;
+      }
     }
 
     if (window.gameUI) {
@@ -1319,9 +1375,9 @@ class NetworkManager {
   }
 
   handleGameStateDelta(delta) {
-    // Save local player prediction
+    // Save local player prediction (but NOT after reconnection)
     let localPlayerState = null;
-    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+    if (!this.justReconnected && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
       localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
     }
@@ -1357,15 +1413,37 @@ class NetworkManager {
       if (delta.meta.bossSpawned !== undefined) window.gameState.state.bossSpawned = delta.meta.bossSpawned;
     }
 
-    // Restore local player prediction
+    // Restore local player prediction (but NOT after reconnection)
     if (localPlayerState && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       window.gameState.state.players[window.gameState.playerId].x = localPlayerState.x;
       window.gameState.state.players[window.gameState.playerId].y = localPlayerState.y;
       window.gameState.state.players[window.gameState.playerId].angle = localPlayerState.angle;
+    } else if (this.justReconnected) {
+      // Clear reconnection flag after accepting server state
+      console.log('[Socket.IO] Position resynchronized after reconnection (delta)');
+      this.justReconnected = false;
     }
 
     if (window.gameUI) {
       window.gameUI.update();
+    }
+  }
+
+  handlePositionCorrection(data) {
+    // Server detected invalid movement and is correcting position
+    console.log('[Socket.IO] Position corrected by server:', data);
+
+    // Force update player position to server's authoritative position
+    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      window.gameState.state.players[window.gameState.playerId].x = data.x;
+      window.gameState.state.players[window.gameState.playerId].y = data.y;
+
+      // Disable client prediction temporarily to accept correction
+      this.justReconnected = true;
+
+      if (window.toastManager) {
+        window.toastManager.show('⚠️ Position corrected', 'warning');
+      }
     }
   }
 
@@ -3598,7 +3676,19 @@ class GameEngine {
     // Managers
     window.inputManager = new InputManager();
     const camera = new CameraManager();
-    window.networkManager = new NetworkManager(io());
+
+    // Socket.IO client configuration with proper transports and error handling
+    const socket = io({
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      timeout: 45000
+    });
+
+    window.networkManager = new NetworkManager(socket);
     window.gameUI = new UIManager(window.gameState);
     window.audioManager = new AudioManager(); // Audio feedback
     window.comboSystem = new ComboSystem(); // Système de combos
