@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Jeu de Zombie Multijoueur</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="addictionStyles.css">
 </head>
 <body>
     <div id="ui">
@@ -19,6 +20,21 @@
                     <p>⬆️ Montez en niveau et débloquez des upgrades</p>
                     <p>🏆 Survivez le plus longtemps possible !</p>
                 </div>
+                <!-- Widgets sur l'écran d'accueil -->
+                <div id="home-widgets" class="home-widgets"></div>
+            </div>
+        </div>
+
+        <!-- Menu de navigation -->
+        <div id="game-menu" style="display: none;">
+            <div class="menu-buttons">
+                <button id="menu-btn-achievements" class="menu-btn" title="Achievements">🏆</button>
+                <button id="menu-btn-challenges" class="menu-btn" title="Défis">🎯</button>
+                <button id="menu-btn-leaderboard" class="menu-btn" title="Leaderboard">📊</button>
+                <button id="menu-btn-unlocks" class="menu-btn" title="Armes">🔓</button>
+                <button id="menu-btn-synergies" class="menu-btn" title="Synergies">⚡</button>
+                <button id="menu-btn-lifetime-stats" class="menu-btn" title="Statistiques">📈</button>
+                <button id="menu-btn-gem-shop" class="menu-btn" title="Gem Shop">💎</button>
             </div>
         </div>
 
@@ -41,6 +57,7 @@
             <div id="score">Score: <span id="score-value">0</span></div>
             <div id="wave">Vague: <span id="wave-value">1</span></div>
             <div id="weapon">Or: <span id="gold-value">0</span> 💰</div>
+            <div id="gems-display">Gems: <span id="gems-value" class="gem-balance">0</span> 💎</div>
             <div id="players-online">Joueurs en ligne: <span id="players-count">1</span></div>
             <div id="zombies-alive">Zombies: <span id="zombies-count">0</span></div>
         </div>
@@ -214,6 +231,19 @@
     <script src="enhancedUI.js"></script>
     <script src="performanceSettings.js"></script>
     <script src="gameIntegration.js"></script>
+    <!-- Addiction Systems (Phase 1-3) -->
+    <script src="achievementSystem.js"></script>
+    <script src="dailyChallenges.js"></script>
+    <script src="leaderboardSystem.js"></script>
+    <script src="unlockSystem.js"></script>
+    <script src="synergySystem.js"></script>
+    <script src="missionSystem.js"></script>
+    <script src="lifetimeStats.js"></script>
+    <script src="gemSystem.js"></script>
+    <script src="retentionHooks.js"></script>
+    <script src="eventSystem.js"></script>
+    <!-- Integration Layer -->
+    <script src="addictionIntegration.js"></script>
     <!-- Main Game -->
     <script src="game.js"></script>
     <!-- Game Patch (must be loaded after game.js) -->
