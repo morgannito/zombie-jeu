@@ -90,7 +90,8 @@ const zombieManager = new ZombieManager(
   gameState,
   CONFIG,
   ZOMBIE_TYPES,
-  (x, y, size) => roomManager.checkWallCollision(x, y, size)
+  (x, y, size) => roomManager.checkWallCollision(x, y, size),
+  io
 );
 
 // ===============================================
@@ -329,160 +330,7 @@ function getXPForLevel(level) {
   }
 }
 
-// Calculer le nombre de zombies à spawner par batch selon la vague
-function getZombiesPerBatch() {
-  if (gameState.wave <= 2) {
-    return 2; // Vagues 1-2 : 2 zombies à la fois
-  } else if (gameState.wave <= 5) {
-    return 3; // Vagues 3-5 : 3 zombies à la fois
-  } else if (gameState.wave <= 8) {
-    return 5; // Vagues 6-8 : 5 zombies à la fois
-  } else if (gameState.wave <= 12) {
-    return 7; // Vagues 9-12 : 7 zombies à la fois
-  } else {
-    return 10; // Vagues 13+ : 10 zombies à la fois (CHAOS!)
-  }
-}
-
-// Spawner un seul zombie (fonction utilitaire)
-function spawnSingleZombie() {
-  // Position aléatoire dans la salle (éviter les murs)
-  let x, y;
-  let attempts = 0;
-  do {
-    x = 100 + Math.random() * (CONFIG.ROOM_WIDTH - 200);
-    y = 100 + Math.random() * (CONFIG.ROOM_HEIGHT - 200);
-    attempts++;
-  } while (checkWallCollision(x, y, CONFIG.ZOMBIE_SIZE) && attempts < 50);
-
-  if (attempts >= 50) return false; // Pas de place disponible
-
-  // Choisir un type de zombie avec pondération progressive selon la vague
-  // Plus la vague est élevée, plus les zombies dangereux sont fréquents
-  let types;
-  if (gameState.wave <= 3) {
-    // Vagues 1-3 : Principalement des zombies normaux
-    types = ['normal', 'normal', 'normal', 'normal', 'fast', 'fast', 'tank'];
-  } else if (gameState.wave <= 6) {
-    // Vagues 4-6 : Mélange équilibré avec apparition des tireurs et zombies poison
-    types = ['normal', 'normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'healer', 'slower', 'poison', 'shooter'];
-  } else if (gameState.wave <= 10) {
-    // Vagues 7-10 : Plus de zombies spéciaux, tireurs et poison
-    types = ['normal', 'fast', 'fast', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'slower', 'slower', 'poison', 'poison', 'shooter', 'shooter'];
-  } else {
-    // Vague 11+ : Chaos total - Beaucoup de zombies dangereux, tireurs et poison
-    types = ['fast', 'fast', 'tank', 'tank', 'tank', 'explosive', 'explosive', 'healer', 'healer', 'slower', 'slower', 'poison', 'poison', 'shooter', 'shooter', 'shooter'];
-  }
-  const typeKey = types[Math.floor(Math.random() * types.length)];
-  const type = ZOMBIE_TYPES[typeKey];
-
-  const zombieId = gameState.nextZombieId++;
-
-  // Les zombies deviennent progressivement plus forts avec les vagues (difficulté progressive améliorée)
-  // CORRECTION: Harmonisé avec ZombieManager.js (0.15 au lieu de 0.10)
-  const waveMultiplier = 1 + (gameState.wave - 1) * 0.15; // +15% par vague
-  const zombieHealth = Math.floor(type.health * waveMultiplier);
-  const zombieDamage = Math.floor(type.damage * waveMultiplier);
-  const zombieSpeed = Math.min(type.speed * (1 + (gameState.wave - 1) * 0.04), type.speed * 1.8); // +4% vitesse par vague, max +80% (augmenté)
-  const zombieGold = Math.floor(type.goldDrop * waveMultiplier);
-  const zombieXP = Math.floor(type.xpDrop * waveMultiplier);
-
-  gameState.zombies[zombieId] = {
-    id: zombieId,
-    type: typeKey,
-    x: x,
-    y: y,
-    health: zombieHealth,
-    maxHealth: zombieHealth,
-    speed: zombieSpeed,
-    damage: zombieDamage,
-    color: type.color,
-    size: type.size,
-    goldDrop: zombieGold,
-    xpDrop: zombieXP,
-    // Attributs spéciaux
-    lastHeal: typeKey === 'healer' ? Date.now() : null,
-    lastShot: typeKey === 'shooter' ? Date.now() : null,
-    lastPoisonTrail: typeKey === 'poison' ? Date.now() : null
-  };
-
-  gameState.zombiesSpawnedThisWave++;
-  return true;
-}
-
-// Spawn des zombies en groupes (MODE INFINI avec vagues)
-function spawnZombie() {
-  if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) {
-    return;
-  }
-
-  // Limiter le spawn selon la vague actuelle - Progression agressive améliorée
-  const zombiesForThisWave = CONFIG.ZOMBIES_PER_ROOM + (gameState.wave - 1) * 7; // +7 zombies par vague (augmenté de 5 à 7)
-
-  if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) {
-    // Spawner le boss si pas encore fait
-    if (!gameState.bossSpawned && Object.keys(gameState.zombies).length === 0) {
-      spawnBoss();
-    }
-    return;
-  }
-
-  // Spawner plusieurs zombies à la fois (batch spawning)
-  const batchSize = getZombiesPerBatch();
-  let spawned = 0;
-
-  for (let i = 0; i < batchSize; i++) {
-    // Vérifier si on a atteint les limites
-    if (Object.keys(gameState.zombies).length >= CONFIG.MAX_ZOMBIES) break;
-    if (gameState.zombiesSpawnedThisWave >= zombiesForThisWave) break;
-
-    if (spawnSingleZombie()) {
-      spawned++;
-    }
-  }
-}
-
-// Spawner un boss zombie (MODE INFINI - difficulté croissante)
-function spawnBoss() {
-  const type = ZOMBIE_TYPES.boss;
-
-  // Le boss devient plus fort à chaque vague (difficulté progressive améliorée)
-  const waveMultiplier = 1 + (gameState.wave - 1) * 0.20; // +20% par vague (augmenté de 15% à 20%)
-  const bossHealth = Math.floor(type.health * waveMultiplier);
-  const bossDamage = Math.floor(type.damage * waveMultiplier);
-  const bossGold = Math.floor(type.goldDrop * waveMultiplier);
-  const bossXP = Math.floor(type.xpDrop * waveMultiplier);
-
-  // Centre de la salle
-  const x = CONFIG.ROOM_WIDTH / 2;
-  const y = CONFIG.ROOM_HEIGHT / 2;
-
-  const zombieId = gameState.nextZombieId++;
-
-  gameState.zombies[zombieId] = {
-    id: zombieId,
-    type: 'boss',
-    x: x,
-    y: y,
-    health: bossHealth,
-    maxHealth: bossHealth,
-    speed: type.speed,
-    damage: bossDamage,
-    color: type.color,
-    size: type.size,
-    goldDrop: bossGold,
-    xpDrop: bossXP,
-    isBoss: true
-  };
-
-  gameState.bossSpawned = true;
-
-  io.emit('bossSpawned', {
-    bossName: `${type.name} (Vague ${gameState.wave})`,
-    bossHealth: bossHealth,
-    wave: gameState.wave
-  });
-}
+// CORRECTION: Code déplacé dans ZombieManager - utiliser zombieManager.spawnZombie() à la place
 
 // Spawn des power-ups
 function spawnPowerup() {
@@ -1168,7 +1016,7 @@ function gameLoop() {
           gameState.zombiesSpawnedThisWave = 0;
 
           // Accélérer le spawn pour la nouvelle vague
-          restartZombieSpawner();
+          zombieManager.restartZombieSpawner();
 
           // Notifier tous les joueurs de la nouvelle vague
           io.emit('newWave', {
@@ -1333,29 +1181,8 @@ function gameLoop() {
   }
 }
 
-// Spawn automatique des zombies avec accélération progressive
-// L'intervalle de spawn diminue avec les vagues pour augmenter la difficulté
-function getSpawnInterval() {
-  // Commence à 1000ms, diminue de 50ms par vague jusqu'à un minimum de 400ms
-  const baseInterval = CONFIG.ZOMBIE_SPAWN_INTERVAL;
-  const reduction = Math.min((gameState.wave - 1) * 50, 600); // Max 600ms de réduction
-  return Math.max(baseInterval - reduction, 400); // Minimum 400ms entre les spawns
-}
-
-let zombieSpawnTimer;
-function startZombieSpawner() {
-  if (zombieSpawnTimer) {
-    clearInterval(zombieSpawnTimer);
-  }
-  zombieSpawnTimer = setInterval(spawnZombie, getSpawnInterval());
-}
-
-// Relancer le timer quand une nouvelle vague commence pour ajuster la vitesse
-function restartZombieSpawner() {
-  startZombieSpawner();
-}
-
-startZombieSpawner();
+// CORRECTION: Démarrer le spawner de zombies via ZombieManager
+zombieManager.startZombieSpawner();
 
 // Spawn automatique des power-ups
 let powerupSpawnTimer = setInterval(spawnPowerup, CONFIG.POWERUP_SPAWN_INTERVAL);
@@ -1483,7 +1310,7 @@ io.on('connection', (socket) => {
     criticalChance: 0,
     goldMagnetRadius: 0,
     dodgeChance: 0,
-    explosiveRounds: false,
+    explosiveRounds: 0,
     explosionRadius: 0,
     explosionDamagePercent: 0,
     extraBullets: 0,
@@ -1683,6 +1510,22 @@ io.on('connection', (socket) => {
       player.comboTimer = 0;
       player.highestCombo = 0;
       player.totalScore = 0;
+
+      // CORRECTION: Réinitialiser toutes les stats de level-up (ne pas conserver entre les runs)
+      player.regeneration = 0;
+      player.bulletPiercing = 0;
+      player.lifeSteal = 0;
+      player.criticalChance = 0;
+      player.goldMagnetRadius = 0;
+      player.dodgeChance = 0;
+      player.explosiveRounds = 0;
+      player.explosionRadius = 0;
+      player.explosionDamagePercent = 0;
+      player.extraBullets = 0;
+      player.thorns = 0;
+      player.autoTurrets = 0;
+      player.lastRegenTick = Date.now();
+      player.lastAutoShot = Date.now();
 
       // Restaurer les upgrades permanents
       player.upgrades = savedUpgrades;
@@ -1973,10 +1816,9 @@ function cleanupServer() {
   console.log('[CLEANUP] Nettoyage des ressources serveur...');
 
   // Arrêter tous les timers
-  if (zombieSpawnTimer) {
-    clearInterval(zombieSpawnTimer);
-    console.log('[CLEANUP] Zombie spawn timer arrêté');
-  }
+  zombieManager.stopZombieSpawner();
+  console.log('[CLEANUP] Zombie spawn timer arrêté');
+
   if (powerupSpawnTimer) {
     clearInterval(powerupSpawnTimer);
     console.log('[CLEANUP] Powerup spawn timer arrêté');
