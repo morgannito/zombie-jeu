@@ -1576,6 +1576,15 @@ class NetworkManager {
       serverHasPlayerUpdate = true;
     }
 
+    // Track previous health for damage detection (SCREEN EFFECTS)
+    let prevHealth = null;
+    let prevMaxHealth = null;
+    if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const currentPlayer = window.gameState.state.players[window.gameState.playerId];
+      prevHealth = currentPlayer.health;
+      prevMaxHealth = currentPlayer.maxHealth;
+    }
+
     if (!this.justReconnected && !serverHasPlayerUpdate && window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const localPlayer = window.gameState.state.players[window.gameState.playerId];
       localPlayerState = { x: localPlayer.x, y: localPlayer.y, angle: localPlayer.angle };
@@ -1638,6 +1647,33 @@ class NetworkManager {
     if (this.justReconnected) {
       console.log('[Socket.IO] Position resynchronized after reconnection (delta)');
       this.justReconnected = false;
+    }
+
+    // Detect damage to player and trigger screen flash (SCREEN EFFECTS)
+    if (prevHealth !== null && prevMaxHealth !== null && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
+      const updatedPlayer = window.gameState.state.players[window.gameState.playerId];
+      if (updatedPlayer.health < prevHealth && updatedPlayer.alive) {
+        const damageAmount = prevHealth - updatedPlayer.health;
+        const damagePercent = damageAmount / prevMaxHealth;
+        if (window.screenEffects) {
+          window.screenEffects.onPlayerDamage(damagePercent);
+        }
+      }
+    }
+
+    // Detect boss death for slow motion effect (SCREEN EFFECTS)
+    if (delta.removed && delta.removed.zombies && window.screenEffects) {
+      // Check if any removed zombie was a boss
+      delta.removed.zombies.forEach(zombieId => {
+        // We need to check if it was a boss before removal
+        // The server should send a specific event for boss death, but we can also detect it here
+        // For now, we'll rely on the bossSpawned meta flag change
+      });
+    }
+
+    // Detect boss death via bossSpawned flag change
+    if (delta.meta && delta.meta.bossSpawned === false && window.gameState.state.bossSpawned === true && window.screenEffects) {
+      window.screenEffects.onBossDeath();
     }
 
     if (window.gameUI) {
@@ -2067,6 +2103,10 @@ class Renderer {
     this.renderParticles(gameState.state.particles);
     this.renderPoisonTrails(gameState.state.poisonTrails, dateNow);
     this.renderExplosions(gameState.state.explosions, dateNow);
+    // Render speed trails (SCREEN EFFECTS)
+    if (window.screenEffects) {
+      window.screenEffects.drawTrails(this.ctx, this.camera);
+    }
     this.renderBullets(gameState.state.bullets, gameState.config);
     this.renderZombies(gameState.state.zombies, timestamp);
     this.renderPlayers(gameState.state.players, playerId, gameState.config, dateNow, timestamp);
@@ -3083,6 +3123,11 @@ class Renderer {
       if (p.speedBoost && dateNow < p.speedBoost) {
         this.ctx.shadowBlur = 20;
         this.ctx.shadowColor = '#00ffff';
+
+        // Create speed trail for current player (SCREEN EFFECTS)
+        if (isCurrentPlayer && window.screenEffects) {
+          window.screenEffects.createSpeedTrail(p.x, p.y);
+        }
       }
 
       // Draw enhanced player sprite
@@ -3954,6 +3999,7 @@ class GameEngine {
     window.comboSystem = new ComboSystem(); // Système de combos
     window.leaderboardSystem = new LeaderboardSystem(); // Système de classement
     window.toastManager = new ToastManager(); // Système de notifications
+    window.screenEffects = new ScreenEffectsManager(this.canvas); // Screen effects (flash, shake, slowmo, trails)
 
     // Mobile controls
     this.mobileControls = new MobileControlsManager();
@@ -3987,6 +4033,11 @@ class GameEngine {
     if (++this._cleanupFrameCounter >= 60) {
       window.gameState.cleanupOrphanedEntities();
       this._cleanupFrameCounter = 0;
+    }
+
+    // Update screen effects (trails decay, etc.) (SCREEN EFFECTS)
+    if (window.screenEffects) {
+      window.screenEffects.update();
     }
 
     // Use CSS pixels (window dimensions) instead of physical canvas dimensions
