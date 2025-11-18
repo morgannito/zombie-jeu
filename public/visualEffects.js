@@ -232,51 +232,6 @@ class ParticleSystem {
 }
 
 /* ============================================
-   SCREEN SHAKE SYSTEM
-   ============================================ */
-
-class ScreenShake {
-  constructor() {
-    this.intensity = 0;
-    this.duration = 0;
-    this.offsetX = 0;
-    this.offsetY = 0;
-  }
-
-  /**
-   * Déclenche un tremblement d'écran
-   */
-  shake(intensity = 10, duration = 300) {
-    this.intensity = Math.max(this.intensity, intensity);
-    this.duration = Math.max(this.duration, duration);
-  }
-
-  /**
-   * Met à jour le tremblement
-   */
-  update(deltaTime = 16) {
-    if (this.duration > 0) {
-      this.duration -= deltaTime;
-
-      // Calcul du décalage aléatoire
-      const currentIntensity = this.intensity * (this.duration / 300);
-      this.offsetX = (Math.random() - 0.5) * currentIntensity * 2;
-      this.offsetY = (Math.random() - 0.5) * currentIntensity * 2;
-    } else {
-      this.offsetX = 0;
-      this.offsetY = 0;
-    }
-  }
-
-  /**
-   * Applique le tremblement au contexte
-   */
-  apply(ctx) {
-    ctx.translate(this.offsetX, this.offsetY);
-  }
-}
-
-/* ============================================
    ANIMATION SYSTEM
    ============================================ */
 
@@ -469,7 +424,7 @@ class LightingSystem {
 class AdvancedEffectsManager {
   constructor() {
     this.particles = new ParticleSystem();
-    this.screenShake = new ScreenShake();
+    // Note: Screen shake is now handled by ScreenEffectsManager (from screenEffects.js)
     this.animations = new AnimationSystem();
     this.lighting = new LightingSystem();
     this.enabled = true;
@@ -482,7 +437,6 @@ class AdvancedEffectsManager {
     if (!this.enabled) return;
 
     this.particles.update();
-    this.screenShake.update(deltaTime);
     this.animations.update();
   }
 
@@ -514,12 +468,7 @@ class AdvancedEffectsManager {
       this.particles.createTrail(x, y, bulletColor, 2);
     }
 
-    // Shake réduit pour machinegun
-    if (weaponType === 'machinegun') {
-      this.screenShake.shake(1, 50);
-    } else {
-      this.screenShake.shake(2, 100);
-    }
+    // Note: Screen shake is now handled by ScreenEffectsManager
   }
 
   /**
@@ -532,9 +481,6 @@ class AdvancedEffectsManager {
     // Étincelles si critique (réduit de 15 à 8)
     if (isCritical) {
       this.particles.createSparks(x, y, 8);
-      this.screenShake.shake(6, 150);
-    } else {
-      this.screenShake.shake(2, 80);
     }
 
     // Damage number
@@ -547,7 +493,6 @@ class AdvancedEffectsManager {
   onZombieDeath(x, y, zombieColor) {
     // Réduit de 30 à 15 particules
     this.particles.createExplosion(x, y, zombieColor, 15, 3);
-    this.screenShake.shake(4, 150);
   }
 
   /**
@@ -556,7 +501,6 @@ class AdvancedEffectsManager {
   onExplosion(x, y, radius) {
     // Réduit de 50 à 25 particules pour l'explosion principale
     this.particles.createExplosion(x, y, '#ff6600', 25, 4);
-    this.screenShake.shake(12, 300);
 
     // Onde de choc réduite (20 -> 10 ondes, 10 -> 5 particules)
     for (let i = 0; i < 10; i++) {
@@ -587,7 +531,6 @@ class AdvancedEffectsManager {
   onLevelUp(x, y) {
     this.animations.createLevelUpAnimation(x, y);
     this.particles.createExplosion(x, y, '#ffd700', 20, 4); // Réduit de 40 à 20
-    this.screenShake.shake(8, 250);
   }
 
   /**
@@ -602,7 +545,6 @@ class AdvancedEffectsManager {
    * Effet de damage player
    */
   onPlayerDamage(x, y, damage) {
-    this.screenShake.shake(10, 200);
     this.animations.createDamageNumber(x, y - 20, damage, true);
   }
 
@@ -611,7 +553,6 @@ class AdvancedEffectsManager {
    */
   onBossSpawn(x, y) {
     this.particles.createExplosion(x, y, '#ff0000', 30, 6); // Réduit de 60 à 30
-    this.screenShake.shake(15, 400);
   }
 
   /**
@@ -635,7 +576,7 @@ class AdvancedEffectsManager {
 if (typeof window !== 'undefined') {
   window.AdvancedEffectsManager = AdvancedEffectsManager;
   window.ParticleSystem = ParticleSystem;
-  window.ScreenShake = ScreenShake;
+  // Note: ScreenShake is exported from screenEffects.js
   window.AnimationSystem = AnimationSystem;
   window.LightingSystem = LightingSystem;
 }
