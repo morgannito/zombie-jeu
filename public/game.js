@@ -2102,6 +2102,7 @@ class Renderer {
     this.renderLoot(gameState.state.loot, gameState.config, dateNow);
     this.renderParticles(gameState.state.particles);
     this.renderPoisonTrails(gameState.state.poisonTrails, dateNow);
+    this.renderToxicPools(gameState.state.toxicPools, dateNow);
     this.renderExplosions(gameState.state.explosions, dateNow);
     // Render speed trails (SCREEN EFFECTS)
     if (window.screenEffects) {
@@ -2284,6 +2285,63 @@ class Renderer {
       this.ctx.stroke();
 
       this.ctx.globalAlpha = 1;
+    });
+  }
+
+  renderToxicPools(toxicPools, now = Date.now()) {
+    if (!toxicPools || !Array.isArray(toxicPools)) return;
+
+    toxicPools.forEach(pool => {
+      // Viewport culling
+      if (!this.camera.isInViewport(pool.x, pool.y, pool.radius * 2)) {
+        return;
+      }
+
+      // Effet de pulsation toxique intense
+      const pulseAmount = Math.sin(now / 200) * 0.15;
+      const age = now - pool.createdAt;
+      const fadeAmount = Math.max(0, 1 - (age / pool.duration));
+
+      this.ctx.save();
+
+      // Cercle extérieur (aura toxique)
+      this.ctx.fillStyle = '#00ff00';
+      this.ctx.globalAlpha = (0.2 + pulseAmount) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(pool.x, pool.y, pool.radius * 1.2, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Cercle principal (flaque toxique)
+      this.ctx.fillStyle = '#22ff22';
+      this.ctx.globalAlpha = (0.4 + pulseAmount * 0.8) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(pool.x, pool.y, pool.radius, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Cercle intérieur (centre dense)
+      this.ctx.fillStyle = '#00dd00';
+      this.ctx.globalAlpha = (0.6 + pulseAmount * 1.2) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(pool.x, pool.y, pool.radius * 0.5, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Contour pulsant intense
+      this.ctx.strokeStyle = '#00ff00';
+      this.ctx.lineWidth = 3;
+      this.ctx.globalAlpha = (0.6 + pulseAmount * 1.5) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(pool.x, pool.y, pool.radius, 0, Math.PI * 2);
+      this.ctx.stroke();
+
+      // Shadow blur pour effet glow
+      this.ctx.shadowBlur = 20;
+      this.ctx.shadowColor = '#00ff00';
+      this.ctx.globalAlpha = (0.3 + pulseAmount) * fadeAmount;
+      this.ctx.beginPath();
+      this.ctx.arc(pool.x, pool.y, pool.radius * 0.3, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      this.ctx.restore();
     });
   }
 
@@ -2830,6 +2888,180 @@ class Renderer {
       this.ctx.arc(zombie.x, zombie.y, zombie.size + 5, 0, Math.PI * 2);
       this.ctx.stroke();
       this.ctx.restore();
+    }
+
+    // === BOSS SPÉCIAUX ===
+    else if (zombie.type === 'bossCharnier') {
+      // Le Charnier - Aura rouge sang pulsante
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 150) * 0.2;
+      this.ctx.strokeStyle = '#8b0000';
+      this.ctx.lineWidth = 5;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 20, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      // Icône crânes
+      this.ctx.fillStyle = '#fff';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 24px Arial';
+      this.ctx.strokeText('💀', zombie.x, zombie.y);
+      this.ctx.fillText('💀', zombie.x, zombie.y);
+
+      // Nom du boss
+      this.ctx.font = 'bold 16px Arial';
+      this.ctx.fillStyle = '#8b0000';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeText('LE CHARNIER', zombie.x, zombie.y - zombie.size - 40);
+      this.ctx.fillText('LE CHARNIER', zombie.x, zombie.y - zombie.size - 40);
+    }
+
+    else if (zombie.type === 'bossInfect') {
+      // L'Infect - Aura toxique verte
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.4 + Math.sin(Date.now() / 200) * 0.2;
+      this.ctx.strokeStyle = '#00ff00';
+      this.ctx.lineWidth = 5;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 25, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      // Icône biohazard
+      this.ctx.fillStyle = '#00ff00';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 26px Arial';
+      this.ctx.strokeText('☣️', zombie.x, zombie.y);
+      this.ctx.fillText('☣️', zombie.x, zombie.y);
+
+      // Nom du boss
+      this.ctx.font = 'bold 16px Arial';
+      this.ctx.fillStyle = '#00ff00';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeText('L\'INFECT', zombie.x, zombie.y - zombie.size - 40);
+      this.ctx.fillText('L\'INFECT', zombie.x, zombie.y - zombie.size - 40);
+    }
+
+    else if (zombie.type === 'bossColosse') {
+      // Le Colosse - Aura orange/rouge selon enrage
+      const isEnraged = zombie.isEnraged;
+      const auraColor = isEnraged ? '#ff0000' : '#ff4500';
+
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.5 + Math.sin(Date.now() / (isEnraged ? 100 : 180)) * 0.3;
+      this.ctx.strokeStyle = auraColor;
+      this.ctx.lineWidth = isEnraged ? 8 : 5;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + (isEnraged ? 30 : 20), 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      // Icône puissance
+      this.ctx.fillStyle = auraColor;
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 28px Arial';
+      this.ctx.strokeText(isEnraged ? '💢' : '💪', zombie.x, zombie.y);
+      this.ctx.fillText(isEnraged ? '💢' : '💪', zombie.x, zombie.y);
+
+      // Nom du boss
+      this.ctx.font = 'bold 16px Arial';
+      this.ctx.fillStyle = auraColor;
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 3;
+      const name = isEnraged ? 'COLOSSE ENRAGÉ' : 'LE COLOSSE';
+      this.ctx.strokeText(name, zombie.x, zombie.y - zombie.size - 40);
+      this.ctx.fillText(name, zombie.x, zombie.y - zombie.size - 40);
+    }
+
+    else if (zombie.type === 'bossRoi') {
+      // Roi Zombie - Aura dorée avec phase
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 120) * 0.3;
+      this.ctx.strokeStyle = '#ffd700';
+      this.ctx.lineWidth = 6;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 25, 0, Math.PI * 2);
+      this.ctx.stroke();
+
+      // Deuxième aura pour phase 2+
+      if (zombie.phase >= 2) {
+        this.ctx.strokeStyle = '#ffaa00';
+        this.ctx.beginPath();
+        this.ctx.arc(zombie.x, zombie.y, zombie.size + 35, 0, Math.PI * 2);
+        this.ctx.stroke();
+      }
+      this.ctx.restore();
+
+      // Icône couronne royale
+      this.ctx.fillStyle = '#ffd700';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 2;
+      this.ctx.font = 'bold 30px Arial';
+      this.ctx.strokeText('👑', zombie.x, zombie.y);
+      this.ctx.fillText('👑', zombie.x, zombie.y);
+
+      // Nom du boss avec phase
+      this.ctx.font = 'bold 16px Arial';
+      this.ctx.fillStyle = '#ffd700';
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 3;
+      const phaseName = `ROI ZOMBIE (Phase ${zombie.phase || 1})`;
+      this.ctx.strokeText(phaseName, zombie.x, zombie.y - zombie.size - 40);
+      this.ctx.fillText(phaseName, zombie.x, zombie.y - zombie.size - 40);
+    }
+
+    else if (zombie.type === 'bossOmega') {
+      // Omega - Aura multicolore selon phase
+      const phaseColors = ['#ff00ff', '#ff0088', '#8800ff', '#ff0000'];
+      const currentColor = phaseColors[(zombie.phase || 1) - 1];
+
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.6 + Math.sin(Date.now() / 80) * 0.4;
+      this.ctx.strokeStyle = currentColor;
+      this.ctx.lineWidth = 8;
+      this.ctx.beginPath();
+      this.ctx.arc(zombie.x, zombie.y, zombie.size + 30, 0, Math.PI * 2);
+      this.ctx.stroke();
+
+      // Auras multiples pour phases avancées
+      if (zombie.phase >= 2) {
+        this.ctx.strokeStyle = '#ff00ff';
+        this.ctx.lineWidth = 5;
+        this.ctx.beginPath();
+        this.ctx.arc(zombie.x, zombie.y, zombie.size + 45, 0, Math.PI * 2);
+        this.ctx.stroke();
+      }
+      if (zombie.phase >= 3) {
+        this.ctx.strokeStyle = '#ffff00';
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        this.ctx.arc(zombie.x, zombie.y, zombie.size + 60, 0, Math.PI * 2);
+        this.ctx.stroke();
+      }
+      this.ctx.restore();
+
+      // Icône omega
+      this.ctx.fillStyle = currentColor;
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 3;
+      this.ctx.font = 'bold 32px Arial';
+      this.ctx.strokeText('Ω', zombie.x, zombie.y + 5);
+      this.ctx.fillText('Ω', zombie.x, zombie.y + 5);
+
+      // Nom du boss avec phase
+      this.ctx.font = 'bold 18px Arial';
+      this.ctx.fillStyle = currentColor;
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 4;
+      const omegaName = `OMEGA (Phase ${zombie.phase || 1}/4)`;
+      this.ctx.strokeText(omegaName, zombie.x, zombie.y - zombie.size - 40);
+      this.ctx.fillText(omegaName, zombie.x, zombie.y - zombie.size - 40);
     }
   }
 

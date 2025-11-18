@@ -479,6 +479,45 @@ function gameLoop() {
     }
   }
 
+  // Mise à jour des flaques toxiques (boss "L'Infect" et "Omega")
+  if (!gameState.toxicPools) gameState.toxicPools = [];
+
+  // Nettoyer les flaques expirées
+  gameState.toxicPools = gameState.toxicPools.filter(pool => {
+    return (now - pool.createdAt) < pool.duration;
+  });
+
+  // Appliquer les dégâts aux joueurs dans les flaques
+  for (let pool of gameState.toxicPools) {
+    for (let playerId in gameState.players) {
+      const player = gameState.players[playerId];
+      if (!player.alive) continue;
+
+      // Vérifier si le joueur est dans la flaque
+      const dist = distance(player.x, player.y, pool.x, pool.y);
+      if (dist < pool.radius) {
+        // Dégâts toutes les 0.5 secondes
+        if (!pool.lastDamage) pool.lastDamage = {};
+        if (!pool.lastDamage[playerId] || now - pool.lastDamage[playerId] >= 500) {
+          pool.lastDamage[playerId] = now;
+
+          // Appliquer les dégâts
+          player.health -= pool.damage;
+
+          // Créer des particules toxiques
+          createParticles(player.x, player.y, '#00ff00', 5);
+
+          // Vérifier la mort
+          if (player.health <= 0) {
+            player.alive = false;
+            player.health = 0;
+            createParticles(player.x, player.y, '#ff0000', 30);
+          }
+        }
+      }
+    }
+  }
+
   // Mise à jour des zombies - ils chassent le joueur le plus proche
   for (let zombieId in gameState.zombies) {
     const zombie = gameState.zombies[zombieId];
@@ -668,6 +707,183 @@ function gameLoop() {
         }
       }
     }
+
+    // ========== BOSS SPÉCIAUX ==========
+
+    // Boss "Le Charnier" - Spawne des zombies en combat
+    if (zombie.type === 'bossCharnier') {
+      const bossType = ZOMBIE_TYPES.bossCharnier;
+      if (!zombie.lastSpawn || now - zombie.lastSpawn >= bossType.spawnCooldown) {
+        zombie.lastSpawn = now;
+
+        // Spawner plusieurs zombies autour du boss
+        for (let i = 0; i < bossType.spawnCount; i++) {
+          if (zombieManager.spawnSingleZombie()) {
+            createParticles(zombie.x, zombie.y, bossType.color, 15);
+          }
+        }
+      }
+    }
+
+    // Boss "L'Infect" - Crée des flaques toxiques
+    if (zombie.type === 'bossInfect') {
+      const bossType = ZOMBIE_TYPES.bossInfect;
+      if (!zombie.lastToxicPool || now - zombie.lastToxicPool >= bossType.toxicPoolCooldown) {
+        zombie.lastToxicPool = now;
+
+        // Créer une flaque toxique à la position actuelle
+        gameState.toxicPools = gameState.toxicPools || [];
+        gameState.toxicPools.push({
+          id: `toxic_${now}_${Math.random()}`,
+          x: zombie.x,
+          y: zombie.y,
+          radius: bossType.toxicPoolRadius,
+          damage: bossType.toxicPoolDamage,
+          createdAt: now,
+          duration: bossType.toxicPoolDuration
+        });
+
+        createParticles(zombie.x, zombie.y, bossType.color, 25);
+      }
+    }
+
+    // Boss "Le Colosse" - S'enrage à 30% HP
+    if (zombie.type === 'bossColosse') {
+      const bossType = ZOMBIE_TYPES.bossColosse;
+      const healthPercent = zombie.health / zombie.maxHealth;
+
+      if (!zombie.isEnraged && healthPercent <= bossType.enrageThreshold) {
+        zombie.isEnraged = true;
+        zombie.speed *= bossType.enrageSpeedMultiplier;
+        zombie.damage = Math.floor(zombie.damage * bossType.enrageDamageMultiplier);
+
+        // Effet visuel d'enrage
+        createParticles(zombie.x, zombie.y, '#ff0000', 50);
+        io.emit('bossEnraged', {
+          bossId: zombieId,
+          message: 'LE COLOSSE EST ENRAGÉ!'
+        });
+      }
+    }
+
+    // Boss "Roi Zombie" - Multi-phases avec patterns
+    if (zombie.type === 'bossRoi') {
+      const bossType = ZOMBIE_TYPES.bossRoi;
+      const healthPercent = zombie.health / zombie.maxHealth;
+
+      // Détection de phase
+      let currentPhase = 1;
+      if (healthPercent <= bossType.phase3Threshold) {
+        currentPhase = 3;
+      } else if (healthPercent <= bossType.phase2Threshold) {
+        currentPhase = 2;
+      }
+
+      // Changement de phase
+      if (currentPhase > zombie.phase) {
+        zombie.phase = currentPhase;
+        io.emit('bossPhaseChange', {
+          bossId: zombieId,
+          phase: currentPhase,
+          message: `ROI ZOMBIE - PHASE ${currentPhase}!`
+        });
+        createParticles(zombie.x, zombie.y, bossType.color, 60);
+      }
+
+      // Téléportation (Phase 2+)
+      if (zombie.phase >= 2 && (!zombie.lastTeleport || now - zombie.lastTeleport >= bossType.teleportCooldown)) {
+        zombie.lastTeleport = now;
+
+        // Téléportation aléatoire dans la salle
+        const newX = 200 + Math.random() * (CONFIG.ROOM_WIDTH - 400);
+        const newY = 200 + Math.random() * (CONFIG.ROOM_HEIGHT - 400);
+
+        if (!roomManager.checkWallCollision(newX, newY, zombie.size)) {
+          createParticles(zombie.x, zombie.y, bossType.color, 30);
+          zombie.x = newX;
+          zombie.y = newY;
+          createParticles(zombie.x, zombie.y, bossType.color, 30);
+        }
+      }
+
+      // Invocation (Phase 3)
+      if (zombie.phase >= 3 && (!zombie.lastSummon || now - zombie.lastSummon >= bossType.summonCooldown)) {
+        zombie.lastSummon = now;
+
+        // Invoquer 5 zombies normaux
+        for (let i = 0; i < 5; i++) {
+          zombieManager.spawnSingleZombie();
+        }
+        createParticles(zombie.x, zombie.y, bossType.color, 40);
+      }
+    }
+
+    // Boss "Omega" - Boss final ultime (combine toutes les capacités)
+    if (zombie.type === 'bossOmega') {
+      const bossType = ZOMBIE_TYPES.bossOmega;
+      const healthPercent = zombie.health / zombie.maxHealth;
+
+      // Détection de phase (4 phases)
+      let currentPhase = 1;
+      if (healthPercent <= bossType.phase4Threshold) {
+        currentPhase = 4;
+      } else if (healthPercent <= bossType.phase3Threshold) {
+        currentPhase = 3;
+      } else if (healthPercent <= bossType.phase2Threshold) {
+        currentPhase = 2;
+      }
+
+      // Changement de phase
+      if (currentPhase > zombie.phase) {
+        zombie.phase = currentPhase;
+        io.emit('bossPhaseChange', {
+          bossId: zombieId,
+          phase: currentPhase,
+          message: `OMEGA - PHASE ${currentPhase}!`
+        });
+        createParticles(zombie.x, zombie.y, bossType.color, 80);
+      }
+
+      // Téléportation (toutes phases)
+      if (!zombie.lastTeleport || now - zombie.lastTeleport >= bossType.teleportCooldown) {
+        zombie.lastTeleport = now;
+        const newX = 200 + Math.random() * (CONFIG.ROOM_WIDTH - 400);
+        const newY = 200 + Math.random() * (CONFIG.ROOM_HEIGHT - 400);
+        if (!roomManager.checkWallCollision(newX, newY, zombie.size)) {
+          createParticles(zombie.x, zombie.y, bossType.color, 40);
+          zombie.x = newX;
+          zombie.y = newY;
+          createParticles(zombie.x, zombie.y, bossType.color, 40);
+        }
+      }
+
+      // Flaques toxiques (Phase 2+)
+      if (zombie.phase >= 2 && (!zombie.lastToxicPool || now - zombie.lastToxicPool >= bossType.toxicPoolCooldown)) {
+        zombie.lastToxicPool = now;
+        gameState.toxicPools = gameState.toxicPools || [];
+        gameState.toxicPools.push({
+          id: `toxic_${now}_${Math.random()}`,
+          x: zombie.x,
+          y: zombie.y,
+          radius: 70,
+          damage: 20,
+          createdAt: now,
+          duration: 10000
+        });
+        createParticles(zombie.x, zombie.y, '#00ff00', 30);
+      }
+
+      // Invocation (Phase 3+)
+      if (zombie.phase >= 3 && (!zombie.lastSummon || now - zombie.lastSummon >= bossType.summonCooldown)) {
+        zombie.lastSummon = now;
+        for (let i = 0; i < 8; i++) {
+          zombieManager.spawnSingleZombie();
+        }
+        createParticles(zombie.x, zombie.y, bossType.color, 50);
+      }
+    }
+
+    // ========== FIN BOSS SPÉCIAUX ==========
 
     // Trouver le joueur le plus proche (OPTIMISÉ avec Quadtree)
     const closestPlayer = collisionManager.findClosestPlayer(
