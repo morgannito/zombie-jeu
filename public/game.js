@@ -1529,6 +1529,11 @@ class PlayerController {
         }
       }
 
+      // Clamp position to map boundaries to prevent player from leaving the map
+      const halfSize = this.gameState.config.PLAYER_SIZE / 2;
+      finalX = Math.max(halfSize, Math.min(this.gameState.config.ROOM_WIDTH - halfSize, finalX));
+      finalY = Math.max(halfSize, Math.min(this.gameState.config.ROOM_HEIGHT - halfSize, finalY));
+
       // Update player position only if it changed
       if (finalX !== player.x || finalY !== player.y) {
         // Client-side prediction

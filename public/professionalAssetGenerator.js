@@ -32,7 +32,7 @@ class ProfessionalAssetGenerator {
                 base: '#0d1f0d',
                 tile: '#1a3a1a',
                 accent: '#2a4a2a',
-                dark: '#05100'5,
+                dark: '#051005',
                 light: '#2f4f2f',
                 detail: '#3a5a3a'
             },
