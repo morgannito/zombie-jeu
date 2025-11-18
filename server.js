@@ -1768,6 +1768,73 @@ io.on('connection', (socket) => {
   });
 });
 
+// Gestion des erreurs 404 (Route non trouvée)
+app.use((req, res, next) => {
+  res.status(404).send(`
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>404 - Page non trouvée</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          text-align: center;
+          padding: 50px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+        }
+        h1 { font-size: 72px; margin: 0; }
+        p { font-size: 24px; }
+        a { color: #ffeb3b; text-decoration: none; font-weight: bold; }
+        a:hover { text-decoration: underline; }
+      </style>
+    </head>
+    <body>
+      <h1>404</h1>
+      <p>🧟 Page non trouvée</p>
+      <p><a href="/">← Retour au jeu</a></p>
+    </body>
+    </html>
+  `);
+});
+
+// Gestion des erreurs serveur (500, 503, etc.)
+app.use((err, req, res, next) => {
+  console.error('Erreur serveur:', err.stack);
+  res.status(err.status || 500).send(`
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Erreur serveur</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          text-align: center;
+          padding: 50px;
+          background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+          color: white;
+        }
+        h1 { font-size: 72px; margin: 0; }
+        p { font-size: 24px; }
+        a { color: #ffeb3b; text-decoration: none; font-weight: bold; }
+        a:hover { text-decoration: underline; }
+        .error-code { opacity: 0.7; font-size: 18px; margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <h1>${err.status || 500}</h1>
+      <p>💥 Une erreur serveur s'est produite</p>
+      <p><a href="/">← Retour au jeu</a></p>
+      <div class="error-code">Code d'erreur: ${err.status || 500}</div>
+    </body>
+    </html>
+  `);
+});
+
 http.listen(PORT, () => {
   console.log(`Serveur démarré sur le port ${PORT}`);
   console.log(`Ouvrez http://localhost:${PORT} dans votre navigateur`);
