@@ -1616,6 +1616,22 @@ class NetworkManager {
           window.gameState.state[type] = {};
         }
         Object.entries(entities).forEach(([id, entity]) => {
+          // FIX: Interpolate local player position updates from server to prevent stuttering
+          if (type === 'players' && id === window.gameState.playerId && window.gameState.state[type][id]) {
+            const currentPlayer = window.gameState.state[type][id];
+            const dx = entity.x - currentPlayer.x;
+            const dy = entity.y - currentPlayer.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Only interpolate if distance is reasonable (< 50px)
+            // For larger distances, accept server position immediately (likely a correction)
+            if (distance < 50) {
+              const interpolationFactor = window.gameState.interpolation.factor || 0.3;
+              entity.x = currentPlayer.x + dx * interpolationFactor;
+              entity.y = currentPlayer.y + dy * interpolationFactor;
+            }
+          }
+
           window.gameState.state[type][id] = entity;
           // Mark entity as seen to prevent orphan cleanup
           window.gameState.markEntitySeen(type, id);
@@ -1704,19 +1720,24 @@ class NetworkManager {
     // Server detected invalid movement and is correcting position
     console.log('[Socket.IO] Position corrected by server:', data);
 
-    // Force update player position to server's authoritative position
+    // Apply smooth interpolation to player position correction
     if (window.gameState.state && window.gameState.state.players && window.gameState.state.players[window.gameState.playerId]) {
       const player = window.gameState.state.players[window.gameState.playerId];
       const oldX = player.x;
       const oldY = player.y;
 
-      player.x = data.x;
-      player.y = data.y;
-
       // Calculate correction distance for logging
       const dx = data.x - oldX;
       const dy = data.y - oldY;
       const correctionDistance = Math.sqrt(dx * dx + dy * dy);
+
+      // FIX: Apply smooth interpolation instead of instant teleport
+      // Use the same interpolation factor as zombies for consistency
+      const interpolationFactor = window.gameState.interpolation.factor || 0.3;
+
+      // Interpolate position smoothly
+      player.x += dx * interpolationFactor;
+      player.y += dy * interpolationFactor;
 
       console.log('[Socket.IO] Position correction applied. Distance:', correctionDistance.toFixed(1), 'px');
 
