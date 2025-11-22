@@ -3,11 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Jeu de Zombie Multijoueur</title>
+
+    <!-- SEO Meta Tags -->
+    <title>🧟 Zombie Survival - Jeu Multijoueur Gratuit en Ligne</title>
+    <meta name="description" content="Jeu de survie zombie multijoueur en temps réel. Affrontez des vagues de zombies, montez en niveau, débloquez des upgrades dans ce rogue-like addictif ! Gratuit et sans téléchargement.">
+    <meta name="keywords" content="jeu zombie, zombie survival, multijoueur, jeu gratuit, rogue-like, jeu navigateur, temps réel, survival game, fps zombie, jeu en ligne">
+    <meta name="author" content="Zombie Survival Game">
+    <meta name="theme-color" content="#00ff00">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Zombie Survival">
+
+    <!-- Open Graph / Facebook / Discord -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Zombie Survival">
+    <meta property="og:title" content="🧟 Zombie Survival - Jeu Multijoueur Gratuit">
+    <meta property="og:description" content="Survivez aux vagues de zombies ! Jeu rogue-like multijoueur en temps réel sur navigateur. Montez en niveau, débloquez des armes et battez vos records !">
+    <meta property="og:url" content="https://zombie-survival.game">
+    <meta property="og:image" content="https://zombie-survival.game/og-image.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="fr_FR">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="🧟 Zombie Survival - Jeu Multijoueur Gratuit">
+    <meta name="twitter:description" content="Jeu de survie zombie multijoueur en temps réel ! Gratuit, sans téléchargement.">
+    <meta name="twitter:image" content="https://zombie-survival.game/twitter-card.jpg">
+    <meta name="twitter:creator" content="@ZombieSurvivalGame">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#00ff00">
+    <link rel="shortcut icon" href="/favicon.ico">
+
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="addictionStyles.css">
+    <link rel="stylesheet" href="uxImprovements.css">
 </head>
 <body>
+    <!-- Skip Link for Accessibility -->
+    <a href="#gameCanvas" class="skip-link">Aller directement au jeu</a>
+
     <div id="ui">
         <div id="nickname-screen" style="display: flex;">
             <div class="nickname-container">
@@ -60,6 +107,33 @@
             <div id="gems-display">Gems: <span id="gems-value" class="gem-balance">0</span> 💎</div>
             <div id="players-online">Joueurs en ligne: <span id="players-count">1</span></div>
             <div id="zombies-alive">Zombies: <span id="zombies-count">0</span></div>
+            <div id="network-status">
+                <span>Ping: <span id="ping-value">0</span>ms</span>
+                <div class="connection-quality" id="quality-indicator"></div>
+            </div>
+        </div>
+
+        <!-- Accessibility & UX Controls -->
+        <div id="ux-controls">
+            <!-- PWA Install Button -->
+            <button id="pwa-install-btn" class="ux-btn" title="Installer l'application" style="display: none;">
+                📥 Installer
+            </button>
+
+            <!-- Share Button -->
+            <button id="share-btn" class="ux-btn" title="Partager le jeu">
+                🔗 Partager
+            </button>
+
+            <!-- Colorblind Mode -->
+            <button id="colorblind-toggle" class="ux-btn" title="Mode daltonien">
+                🎨 Couleurs
+            </button>
+
+            <!-- Help/Tutorial -->
+            <button id="help-btn" class="ux-btn" title="Aide et tutoriel">
+                ❓ Aide
+            </button>
         </div>
 
         <div id="spawn-protection" style="display: none;">
@@ -197,6 +271,124 @@
         <!-- Toast Notifications Container -->
         <div id="toast-container"></div>
 
+        <!-- Help/Tutorial Modal -->
+        <div id="help-modal" style="display: none;">
+            <div class="help-modal-content">
+                <div class="help-header">
+                    <h2>📚 Guide du Jeu</h2>
+                    <button id="help-close-btn" class="close-btn">✕</button>
+                </div>
+
+                <div class="help-tabs">
+                    <button class="help-tab active" data-tab="basics">🎮 Bases</button>
+                    <button class="help-tab" data-tab="zombies">🧟 Zombies</button>
+                    <button class="help-tab" data-tab="upgrades">⬆️ Améliorations</button>
+                    <button class="help-tab" data-tab="tips">💡 Astuces</button>
+                </div>
+
+                <div class="help-content">
+                    <div class="help-tab-content active" id="tab-basics">
+                        <h3>Comment jouer</h3>
+                        <ul>
+                            <li><strong>Objectif :</strong> Survivez le plus longtemps possible aux vagues de zombies</li>
+                            <li><strong>Déplacement :</strong> Utilisez WASD ou les flèches directionnelles</li>
+                            <li><strong>Tir :</strong> Visez avec la souris et cliquez pour tirer</li>
+                            <li><strong>Loot :</strong> Ramassez automatiquement l'or et l'XP en marchant dessus</li>
+                            <li><strong>Level-up :</strong> Montez en niveau pour débloquer des améliorations puissantes</li>
+                            <li><strong>Shop :</strong> Dépensez votre or entre les vagues pour des upgrades permanents</li>
+                        </ul>
+                    </div>
+
+                    <div class="help-tab-content" id="tab-zombies">
+                        <h3>Types de Zombies</h3>
+                        <div class="zombie-info">
+                            <div class="zombie-type">
+                                <strong>🟢 Zombie Normal</strong>
+                                <p>Vie: 65 | Vitesse: Moyenne | Dégâts: 8</p>
+                            </div>
+                            <div class="zombie-type">
+                                <strong>🟡 Zombie Rapide</strong>
+                                <p>Vie: 45 | Vitesse: Élevée | Dégâts: 12</p>
+                            </div>
+                            <div class="zombie-type">
+                                <strong>🟠 Zombie Tank</strong>
+                                <p>Vie: 170 | Vitesse: Lente | Dégâts: 20</p>
+                            </div>
+                            <div class="zombie-type danger">
+                                <strong>💣 Zombie Explosif</strong>
+                                <p>Explose à la mort ! Restez à distance !</p>
+                            </div>
+                            <div class="zombie-type">
+                                <strong>💚 Zombie Soigneur</strong>
+                                <p>Soigne les zombies proches - Priorité haute !</p>
+                            </div>
+                            <div class="zombie-type">
+                                <strong>💜 Zombie Ralentisseur</strong>
+                                <p>Ralentit les joueurs dans un rayon autour de lui</p>
+                            </div>
+                            <div class="zombie-type boss">
+                                <strong>💀 BOSS</strong>
+                                <p>Apparaît à la fin de chaque vague - Très résistant !</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="help-tab-content" id="tab-upgrades">
+                        <h3>Système d'Améliorations</h3>
+                        <h4>Améliorations Communes (60%)</h4>
+                        <ul>
+                            <li>❤️ <strong>Cœur Robuste</strong> - +30 PV max</li>
+                            <li>⚔️ <strong>Force Brute</strong> - +15% dégâts</li>
+                            <li>👟 <strong>Vélocité</strong> - +20% vitesse</li>
+                            <li>🔫 <strong>Gâchette Rapide</strong> - -15% cooldown armes</li>
+                        </ul>
+
+                        <h4>Améliorations Rares (30%)</h4>
+                        <ul>
+                            <li>💚 <strong>Régénération</strong> - +1 PV/sec</li>
+                            <li>🎯 <strong>Balles Perforantes</strong> - Les balles traversent +1 ennemi</li>
+                            <li>🩸 <strong>Vol de Vie</strong> - +5% de vol de vie</li>
+                            <li>💥 <strong>Coup Critique</strong> - +10% chance de critique (x2 dégâts)</li>
+                        </ul>
+
+                        <h4>Améliorations Légendaires (10%)</h4>
+                        <ul>
+                            <li>💣 <strong>Munitions Explosives</strong> - Les balles explosent !</li>
+                            <li>🎆 <strong>Tir Multiple</strong> - +1 balle supplémentaire</li>
+                        </ul>
+                    </div>
+
+                    <div class="help-tab-content" id="tab-tips">
+                        <h3>Astuces de Pro</h3>
+                        <ul>
+                            <li>🎯 <strong>Ciblez les soigneurs en premier</strong> - Ils peuvent rendre les vagues interminables</li>
+                            <li>💣 <strong>Utilisez les zombies explosifs</strong> - Leur explosion blesse les autres zombies</li>
+                            <li>🏃 <strong>Restez mobile</strong> - Ne vous laissez pas encercler</li>
+                            <li>💰 <strong>Investissez dans la vie max</strong> - Plus de marge d'erreur</li>
+                            <li>⚔️ <strong>Équilibrez dégâts et vitesse de tir</strong> - Meilleur DPS combiné</li>
+                            <li>🎮 <strong>Utilisez les obstacles</strong> - Créez des goulots d'étranglement</li>
+                            <li>📊 <strong>Appuyez sur TAB</strong> - Voir toutes vos stats en détail</li>
+                        </ul>
+
+                        <h3>Raccourcis Clavier</h3>
+                        <ul>
+                            <li><kbd>TAB</kbd> - Ouvrir le panneau de statistiques</li>
+                            <li><kbd>ESC</kbd> - Fermer les menus</li>
+                            <li><kbd>M</kbd> - Activer/désactiver le son</li>
+                            <li><kbd>F</kbd> - Basculer en plein écran</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="help-footer">
+                    <label>
+                        <input type="checkbox" id="dont-show-tutorial">
+                        Ne plus afficher ce tutoriel au démarrage
+                    </label>
+                </div>
+            </div>
+        </div>
+
         <!-- Mobile Controls -->
         <div id="mobile-controls" style="display: none;">
             <!-- Virtual Joystick -->
@@ -249,9 +441,78 @@
     <script src="eventSystem.js"></script>
     <!-- Integration Layer -->
     <script src="addictionIntegration.js"></script>
+    <!-- UX Improvements -->
+    <script src="uxImprovements.js"></script>
     <!-- Main Game -->
     <script src="game.js"></script>
     <!-- Game Patch (must be loaded after game.js) -->
     <script src="gamePatch.js"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        // Register Service Worker for PWA functionality
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then((registration) => {
+                        console.log('✅ Service Worker registered:', registration.scope);
+
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('🔄 Service Worker update found');
+
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New service worker available, prompt user to reload
+                                    if (confirm('🎮 Nouvelle version disponible ! Recharger pour mettre à jour ?')) {
+                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch((error) => {
+                        console.error('❌ Service Worker registration failed:', error);
+                    });
+
+                // Handle service worker updates
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('🔄 Service Worker updated, reloading...');
+                    window.location.reload();
+                });
+            });
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('💾 PWA install prompt available');
+            e.preventDefault();
+            deferredPrompt = e;
+
+            // Show custom install button (we'll add this later)
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) {
+                installBtn.style.display = 'block';
+                installBtn.addEventListener('click', async () => {
+                    if (deferredPrompt) {
+                        deferredPrompt.prompt();
+                        const { outcome } = await deferredPrompt.userChoice;
+                        console.log(`PWA install outcome: ${outcome}`);
+                        deferredPrompt = null;
+                        installBtn.style.display = 'none';
+                    }
+                });
+            }
+        });
+
+        // PWA installed successfully
+        window.addEventListener('appinstalled', () => {
+            console.log('🎉 PWA installed successfully!');
+            deferredPrompt = null;
+        });
+    </script>
 </body>
 </html>

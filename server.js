@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
@@ -38,8 +39,31 @@ const PlayerManager = require('./lib/server/PlayerManager');
 
 const PORT = process.env.PORT || 3000;
 
+// Enable Gzip/Brotli compression for all responses
+// This reduces response sizes by 60-80% for text-based files (JS, CSS, HTML)
+app.use(compression({
+  // Compression level (0-9, where 9 is maximum compression but slower)
+  level: 6, // Good balance between speed and compression
+  // Only compress responses larger than this threshold (in bytes)
+  threshold: 1024, // 1KB - don't compress tiny responses
+  // Filter function - which responses to compress
+  filter: (req, res) => {
+    // Don't compress if the client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression filter function from compression library
+    return compression.filter(req, res);
+  }
+}));
+
 // Servir les fichiers statiques
-app.use(express.static('public'));
+app.use(express.static('public', {
+  // Set cache control headers for better performance
+  maxAge: '1d', // Cache static assets for 1 day
+  etag: true, // Enable ETag for cache validation
+  lastModified: true
+}));
 
 // Importer la configuration
 const {
